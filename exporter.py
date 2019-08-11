@@ -41,7 +41,7 @@ class HomematicMetricsProcessor(threading.Thread):
   def generateMetrics(self):
     logging.info("Gathering metrics")
 
-    with xmlrpc.client.ServerProxy(self.ccu_url) as proxy:
+    with self.createProxy() as proxy:
       devices = proxy.listDevices()
       for device in devices:
         devType = device.get('TYPE')
@@ -72,6 +72,24 @@ class HomematicMetricsProcessor(threading.Thread):
               logging.debug("Paramset for {}".format(devAddress))
               logging.debug(pformat(paramset))
 
+  def createProxy(self):
+    transport = xmlrpc.client.Transport()
+    connection = transport.make_connection(self.ccu_host)
+    connection.timeout = 5
+    return xmlrpc.client.ServerProxy(self.ccu_url, transport=transport)
+
+  def fetchDevicesList(self):
+    with self.createProxy() as proxy:
+      result = []
+      for entry in proxy.listDevices():
+        if entry.get('TYPE') in processor.SUPPORTED_TYPES or entry.get('PARENT_TYPE') in processor.SUPPORTED_TYPES:
+          result.append(entry)
+      return result
+
+  def fetchParamSet(self, address):
+    with self.createProxy() as proxy:
+      return proxy.getParamset(address, 'VALUES')
+
   def processSingleValue(self, deviceAddress, deviceType, parentDeviceType, paramType, key, value):
     logging.debug("Found {} param {} with value {}".format(paramType, key, value))
 
@@ -92,10 +110,6 @@ def start_http_server(port, addr='', registry=core.REGISTRY):
   t.daemon = False
   t.start()
 
-def start_gathering(ccu_host, ccu_port, interval):
-  t = HomematicMetricsProcessor(ccu_host, ccu_port, interval)
-  t.start()
-
 if __name__ == '__main__':
 
   parser = argparse.ArgumentParser()
@@ -104,6 +118,8 @@ if __name__ == '__main__':
   parser.add_argument("--interval", help="The interval between two gathering runs", default=60)
   parser.add_argument("--port", help="The port where to expose the exporter", default=8010)
   parser.add_argument("--debug", action="store_true")
+  parser.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
+  parser.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
   args = parser.parse_args()
 
   if args.debug:
@@ -111,7 +127,15 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(level=logging.INFO)
 
-  start_gathering(args.ccu_host, args.ccu_port, args.interval)
+  processor = HomematicMetricsProcessor(args.ccu_host, args.ccu_port, args.interval)
 
-  # Start up the server to expose the metrics.
-  start_http_server(int(args.port))
+  if args.dump_devices:
+    print(pformat(processor.fetchDevicesList()))
+  elif args.dump_parameters:
+    address = args.dump_parameters
+    print(pformat(processor.fetchParamSet(address)))
+  else:
+    processor.start()
+    # Start up the server to expose the metrics.
+    start_http_server(int(args.port))
+
