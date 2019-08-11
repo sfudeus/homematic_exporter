@@ -1,7 +1,7 @@
-#!/usr/local/bin/python3
+#!/usr/bin/env python3
 
 from prometheus_client import Gauge, Counter, Summary, MetricsHandler, core
-from pprint import pformat
+from pprint import pformat, pprint
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
@@ -123,9 +123,9 @@ if __name__ == '__main__':
   args = parser.parse_args()
 
   if args.debug:
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
   else:
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
   processor = HomematicMetricsProcessor(args.ccu_host, args.ccu_port, args.interval)
 
