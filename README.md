@@ -1,9 +1,9 @@
 # homematic_exporter
 
-A simple tool to export data from [HomematicIP](https://www.homematic.com/) devices for consumption by [Prometheus](https://prometheus.io/), written in Python 3. 
+A simple tool to export data from [HomematicIP](https://www.homematic.com/) devices for consumption by [Prometheus](https://prometheus.io/), written in Python 3.
 
 `homematic_exporter will listen on a freely definable port and emit data in prometheus format which is periodically fetched via XML-RPC from CCU3. The
-fetching period is configurable, too. 
+fetching period is configurable, too.
 
 ## Usage
 
@@ -34,7 +34,7 @@ optional arguments:
                         given device
 ```
 
-Can be used via docker as well. 
+Can be used via docker as well.
 ```bash
 
 > $ docker run --rm sfudeus/homematic_exporter --help
@@ -60,18 +60,15 @@ optional arguments:
 
 ## Metrics
 
-Metrics are all prefixed with `homematic_`, the remaining name is based on the parameter name within the device descriptor. 
-All metrics are equipped with labels for the `ccu` instance, the device address, device type and parent device type. 
-In addition a device mapping can be added with a `--mapping_file`. Device addresses can be mapped to custom names which are then usable as labels in e.g. Grafana. 
+Metrics are all prefixed with `homematic_`, the remaining name is based on the parameter name within the device descriptor.
+All metrics are equipped with labels for the `ccu` instance, the device address, device type and parent device type.
+In addition a device mapping can be added with a `--mapping_file`. Device addresses can be mapped to custom names which are then usable as labels in e.g. Grafana.
 
 ## Restrictions
 
-Only a statically defined list of device types is supported so far (since I could only test those). Currently these are: 
+Only a statically defined list of device types is supported so far (since I could only test those). Currently these are:
 * the weather station (`HmIP-SWO-PL`)
 * the temperature and humidity sensor (`HmIP-STH`)
 
-If you want support for more devices, you can easily extend them in the source code (most likely I will make that configurable) or wait for me to implement that. You can support that by donating the intended device :-). 
-Feel free to open issues for unsupported items. 
-
-
-
+If you want support for more devices, you can easily extend them in the source code (most likely I will make that configurable) or wait for me to implement that. You can support that by donating the intended device :-).
+Feel free to open issues for unsupported items.
