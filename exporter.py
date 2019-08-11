@@ -10,6 +10,7 @@ import argparse
 import logging
 import threading
 import time
+import json
 
 class HomematicMetricsProcessor(threading.Thread):
 
@@ -21,29 +22,34 @@ class HomematicMetricsProcessor(threading.Thread):
   ccu_url = ''
   metrics = {}
   gathering_interval = 60
+  device_count = None
+  mappedNames = {}
 
   def run(self):
     logging.info("Starting thread for data gathering")
-    gathering_summary = Summary('gathering_count', 'Amount of gathering runs', labelnames=['instance'], namespace=self.METRICS_NAMESPACE, labelvalues=[self.ccu_host])
+    gathering_counter = Counter('gathering_count', 'Amount of gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
     while True:
-      with gathering_summary.time():
-        self.generateMetrics()
+      self.generateMetrics()
+      gathering_counter.labels(self.ccu_host).inc()
       time.sleep(60)
 
-  def __init__(self, ccu_host, ccu_port, gathering_interval):
+  def __init__(self, ccu_host, ccu_port, gathering_interval, mapping_file):
     super().__init__()
     self.ccu_host = ccu_host
     self.ccu_port = ccu_port
     self.ccu_url = "http://{}:{}".format(args.ccu_host, args.ccu_port)
     self.gathering_interval = gathering_interval
+    self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
+    if mapping_file:
+      with open(mapping_file) as json_file:
+        self.mappedNames = json.load(json_file)
 
   def generateMetrics(self):
     logging.info("Gathering metrics")
 
     with self.createProxy() as proxy:
-      devices = proxy.listDevices()
-      for device in devices:
+      for device in self.fetchDevicesList():
         devType = device.get('TYPE')
         devParentType = device.get('PARENT_TYPE')
         devAddress = device.get('ADDRESS')
@@ -84,6 +90,7 @@ class HomematicMetricsProcessor(threading.Thread):
       for entry in proxy.listDevices():
         if entry.get('TYPE') in processor.SUPPORTED_TYPES or entry.get('PARENT_TYPE') in processor.SUPPORTED_TYPES:
           result.append(entry)
+      self.devicecount.labels(self.ccu_host).set(len(result))
       return result
 
   def fetchParamSet(self, address):
@@ -96,9 +103,9 @@ class HomematicMetricsProcessor(threading.Thread):
     if value != None:
       gaugename = key.lower()
       if not self.metrics.get(gaugename):
-        self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['instance', 'device', 'device_type', 'parent_device_type'], namespace=self.METRICS_NAMESPACE)
+        self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
       gauge = self.metrics.get(gaugename)
-      gauge.labels(instance=self.ccu_host, device=deviceAddress, device_type=deviceType, parent_device_type=parentDeviceType).set(value)
+      gauge.labels(ccu=self.ccu_host, device=deviceAddress, device_type=deviceType, parent_device_type=parentDeviceType, mapped_name=self.mappedNames.get(deviceAddress, deviceAddress)).set(value)
 
 class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
   """Thread per request HTTP server."""
@@ -117,6 +124,7 @@ if __name__ == '__main__':
   parser.add_argument("--ccu_port", help="The port for the xmlrpc service", default=2010)
   parser.add_argument("--interval", help="The interval between two gathering runs", default=60)
   parser.add_argument("--port", help="The port where to expose the exporter", default=8010)
+  parser.add_argument("--mapping_file", help="A file with mapping from addresses to names")
   parser.add_argument("--debug", action="store_true")
   parser.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
   parser.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
@@ -127,7 +135,7 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-  processor = HomematicMetricsProcessor(args.ccu_host, args.ccu_port, args.interval)
+  processor = HomematicMetricsProcessor(args.ccu_host, args.ccu_port, args.interval, args.mapping_file)
 
   if args.dump_devices:
     print(pformat(processor.fetchDevicesList()))
