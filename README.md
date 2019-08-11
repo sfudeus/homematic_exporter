@@ -63,3 +63,15 @@ optional arguments:
 Metrics are all prefixed with `homematic_`, the remaining name is based on the parameter name within the device descriptor. 
 All metrics are equipped with labels for the `ccu` instance, the device address, device type and parent device type. 
 In addition a device mapping can be added with a `--mapping_file`. Device addresses can be mapped to custom names which are then usable as labels in e.g. Grafana. 
+
+## Restrictions
+
+Only a statically defined list of device types is supported so far (since I could only test those). Currently these are: 
+* the weather station (`HmIP-SWO-PL`)
+* the temperature and humidity sensor (`HmIP-STH`)
+
+If you want support for more devices, you can easily extend them in the source code (most likely I will make that configurable) or wait for me to implement that. You can support that by donating the intended device :-). 
+Feel free to open issues for unsupported items. 
+
+
+
