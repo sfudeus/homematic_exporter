@@ -62,14 +62,14 @@ class HomematicMetricsProcessor(threading.Thread):
           logging.debug("Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
           logging.debug(pformat(device))
 
-          if 'VALUES' in device.get('PARAMSETS') and devType != 'MAINTENANCE':
+          if 'VALUES' in device.get('PARAMSETS'):
             paramsetDescription = proxy.getParamsetDescription(devAddress, 'VALUES')
             paramset = proxy.getParamset(devAddress, 'VALUES')
 
             for key in paramsetDescription:
               paramDesc = paramsetDescription.get(key)
               paramType = paramDesc.get('TYPE')
-              if paramType == 'FLOAT' or paramType == "INTEGER":
+              if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
                 self.processSingleValue(devAddress, devType, devParentType, paramType, key, paramset.get(key))
 
             if len(paramset)>0:
