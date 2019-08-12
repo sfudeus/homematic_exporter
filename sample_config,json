@@ -1,0 +1,10 @@
+{
+  "supported_device_types": [
+    "HmIP-SWO-PL",
+    "HmIP-STH"
+  ],
+  "device_mapping": {
+    "00112233445566": "Garden",
+    "00778899aaccdd": "Room1"
+  }
+}
