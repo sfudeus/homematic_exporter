@@ -15,7 +15,7 @@ import json
 class HomematicMetricsProcessor(threading.Thread):
 
   METRICS_NAMESPACE = 'homematic'
-  SUPPORTED_TYPES = [ 'HmIP-SWO-PL', 'HmIP-STH']
+  SUPPORTED_TYPES = [ 'HmIP-SWO-PL', 'HmIP-STH' ]
 
   ccu_host = ''
   ccu_port = ''
@@ -52,8 +52,9 @@ class HomematicMetricsProcessor(threading.Thread):
       for device in self.fetchDevicesList():
         devType = device.get('TYPE')
         devParentType = device.get('PARENT_TYPE')
+        devParentAddress = device.get('PARENT')
         devAddress = device.get('ADDRESS')
-        if device.get('PARENT') == '' and devType in self.SUPPORTED_TYPES:
+        if devParentAddress == '' and devType in self.SUPPORTED_TYPES:
           devChildcount = len(device.get('CHILDREN'))
           logging.info("Found top-level device {} of type {} with {} children ".format(devAddress, devType, devChildcount))
           logging.debug(pformat(device))
@@ -70,7 +71,7 @@ class HomematicMetricsProcessor(threading.Thread):
               paramDesc = paramsetDescription.get(key)
               paramType = paramDesc.get('TYPE')
               if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
-                self.processSingleValue(devAddress, devType, devParentType, paramType, key, paramset.get(key))
+                self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
 
             if len(paramset)>0:
               logging.debug("ParamsetDescription for {}".format(devAddress))
@@ -97,7 +98,7 @@ class HomematicMetricsProcessor(threading.Thread):
     with self.createProxy() as proxy:
       return proxy.getParamset(address, 'VALUES')
 
-  def processSingleValue(self, deviceAddress, deviceType, parentDeviceType, paramType, key, value):
+  def processSingleValue(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
     logging.debug("Found {} param {} with value {}".format(paramType, key, value))
 
     if value != None:
@@ -105,7 +106,13 @@ class HomematicMetricsProcessor(threading.Thread):
       if not self.metrics.get(gaugename):
         self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
       gauge = self.metrics.get(gaugename)
-      gauge.labels(ccu=self.ccu_host, device=deviceAddress, device_type=deviceType, parent_device_type=parentDeviceType, mapped_name=self.mappedNames.get(deviceAddress, deviceAddress)).set(value)
+      if deviceAddress in self.mappedNames:
+        mappedName = self.mappedNames[deviceAddress]
+      elif parentDeviceAddress in self.mappedNames:
+        mappedName = self.mappedNames[parentDeviceAddress]
+      else:
+        mappedName = deviceAddress
+      gauge.labels(ccu=self.ccu_host, device=deviceAddress, device_type=deviceType, parent_device_type=parentDeviceType, mapped_name=mappedName).set(value)
 
 class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
   """Thread per request HTTP server."""
