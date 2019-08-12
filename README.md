@@ -14,10 +14,9 @@ The exporter can be run in different modes:
 
 ```bash
 
-> ./exporter.py --help
 usage: exporter.py [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT]
                    [--interval INTERVAL] [--port PORT]
-                   [--mapping_file MAPPING_FILE] [--debug] [--dump_devices]
+                   [--config_file CONFIG_FILE] [--debug] [--dump_devices]
                    [--dump_parameters DUMP_PARAMETERS]
 
 optional arguments:
@@ -26,8 +25,9 @@ optional arguments:
   --ccu_port CCU_PORT   The port for the xmlrpc service
   --interval INTERVAL   The interval between two gathering runs
   --port PORT           The port where to expose the exporter
-  --mapping_file MAPPING_FILE
-                        A file with mapping from addresses to names
+  --config_file CONFIG_FILE
+                        A config file with e.g. supported types and device
+                        name mappings
   --debug
   --dump_devices        Do not start exporter, just dump device list
   --dump_parameters DUMP_PARAMETERS
@@ -42,7 +42,7 @@ Can be used via docker as well.
 > $ docker run --rm sfudeus/homematic_exporter --help
 usage: homematic_exporter [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT]
                           [--interval INTERVAL] [--port PORT]
-                          [--mapping_file MAPPING_FILE] [--debug]
+                          [--config_file CONFIG_FILE] [--debug]
                           [--dump_devices] [--dump_parameters DUMP_PARAMETERS]
 
 optional arguments:
@@ -51,8 +51,9 @@ optional arguments:
   --ccu_port CCU_PORT   The port for the xmlrpc service
   --interval INTERVAL   The interval between two gathering runs
   --port PORT           The port where to expose the exporter
-  --mapping_file MAPPING_FILE
-                        A file with mapping from addresses to names
+  --config_file CONFIG_FILE
+                        A config file with e.g. supported types and device
+                        name mappings
   --debug
   --dump_devices        Do not start exporter, just dump device list
   --dump_parameters DUMP_PARAMETERS
@@ -68,10 +69,10 @@ In addition a device mapping can be added with a `--mapping_file`. Device addres
 
 ## Restrictions
 
-Only a statically defined list of device types is supported so far (since I could only test those). Currently these are:
+Only a configurable list of device types is supported so far (since I could only test those). Currently these are:
 
 * the weather station (`HmIP-SWO-PL`)
 * the temperature and humidity sensor (`HmIP-STH`)
 
-If you want support for more devices, you can easily extend them in the source code (most likely I will make that configurable) or wait for me to implement that. You can support that by donating the intended device :-).
+If you want support for more devices, you can easily extend them via config file or wait for me to implement that. You can support that by donating the intended device :-).
 Feel free to open issues for unsupported items.
