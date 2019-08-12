@@ -2,18 +2,19 @@
 
 A simple tool to export data from [HomematicIP](https://www.homematic.com/) devices for consumption by [Prometheus](https://prometheus.io/), written in Python 3.
 
-`homematic_exporter will listen on a freely definable port and emit data in prometheus format which is periodically fetched via XML-RPC from CCU3. The
-fetching period is configurable, too.
+`homematic_exporter` will listen on a freely definable port and emit data in prometheus format which is periodically fetched via XML-RPC from CCU3. The fetching period is configurable, too.
 
 ## Usage
 
 The exporter can be run in different modes:
+
 * with `--dump_devices`, only the device list will be dumped and the script terminates (used for debugging purposes)
 * with `--dump_parameters <deviceAddress>`, the parameters of a single device are dumped and the script terminates (used for debugging purposes)
 * without special arguments (only `ccu_host`is mandatory) data is continuously gathered and exposed via HTTP
 
 ```bash
-> ./exporter.py --help                                                                                                                                                   [±master ●]
+
+> ./exporter.py --help
 usage: exporter.py [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT]
                    [--interval INTERVAL] [--port PORT]
                    [--mapping_file MAPPING_FILE] [--debug] [--dump_devices]
@@ -35,6 +36,7 @@ optional arguments:
 ```
 
 Can be used via docker as well.
+
 ```bash
 
 > $ docker run --rm sfudeus/homematic_exporter --help
@@ -67,6 +69,7 @@ In addition a device mapping can be added with a `--mapping_file`. Device addres
 ## Restrictions
 
 Only a statically defined list of device types is supported so far (since I could only test those). Currently these are:
+
 * the weather station (`HmIP-SWO-PL`)
 * the temperature and humidity sensor (`HmIP-STH`)
 
