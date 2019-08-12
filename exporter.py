@@ -15,35 +15,44 @@ import json
 class HomematicMetricsProcessor(threading.Thread):
 
   METRICS_NAMESPACE = 'homematic'
-  SUPPORTED_TYPES = [ 'HmIP-SWO-PL', 'HmIP-STH' ]
+  DEFAULT_SUPPORTED_TYPES = [ 'HmIP-SWO-PL', 'HmIP-STH' ]
 
   ccu_host = ''
   ccu_port = ''
   ccu_url = ''
-  metrics = {}
   gathering_interval = 60
-  device_count = None
   mappedNames = {}
+  supported_device_types = DEFAULT_SUPPORTED_TYPES
+
+  device_count = None
+  metrics = {}
 
   def run(self):
     logging.info("Starting thread for data gathering")
+    logging.info("Mapping {} devices with custom names".format(len(self.mappedNames)))
+    logging.info("Supporting {} device types: {}".format(len(self.supported_device_types), ",".join(self.supported_device_types)))
+
     gathering_counter = Counter('gathering_count', 'Amount of gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
     while True:
       self.generateMetrics()
       gathering_counter.labels(self.ccu_host).inc()
       time.sleep(60)
 
-  def __init__(self, ccu_host, ccu_port, gathering_interval, mapping_file):
+  def __init__(self, ccu_host, ccu_port, gathering_interval, config_filename):
     super().__init__()
-    self.ccu_host = ccu_host
-    self.ccu_port = ccu_port
-    self.ccu_url = "http://{}:{}".format(args.ccu_host, args.ccu_port)
-    self.gathering_interval = gathering_interval
-    self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
-    if mapping_file:
-      with open(mapping_file) as json_file:
-        self.mappedNames = json.load(json_file)
+    if config_filename:
+      with open(config_filename) as config_file:
+        logging.info("Processing config file {}".format(config_filename))
+        config = json.load(config_file)
+        self.mappedNames = config.get('device_mapping', {})
+        self.supported_device_types = config.get('supported_device_types', self.DEFAULT_SUPPORTED_TYPES)
+
+      self.ccu_host = ccu_host
+      self.ccu_port = ccu_port
+      self.ccu_url = "http://{}:{}".format(args.ccu_host, args.ccu_port)
+      self.gathering_interval = gathering_interval
+      self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
   def generateMetrics(self):
     logging.info("Gathering metrics")
@@ -54,12 +63,12 @@ class HomematicMetricsProcessor(threading.Thread):
         devParentType = device.get('PARENT_TYPE')
         devParentAddress = device.get('PARENT')
         devAddress = device.get('ADDRESS')
-        if devParentAddress == '' and devType in self.SUPPORTED_TYPES:
+        if devParentAddress == '' and devType in self.supported_device_types:
           devChildcount = len(device.get('CHILDREN'))
           logging.info("Found top-level device {} of type {} with {} children ".format(devAddress, devType, devChildcount))
           logging.debug(pformat(device))
 
-        if devParentType in self.SUPPORTED_TYPES:
+        if devParentType in self.supported_device_types:
           logging.debug("Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
           logging.debug(pformat(device))
 
@@ -89,7 +98,7 @@ class HomematicMetricsProcessor(threading.Thread):
     with self.createProxy() as proxy:
       result = []
       for entry in proxy.listDevices():
-        if entry.get('TYPE') in processor.SUPPORTED_TYPES or entry.get('PARENT_TYPE') in processor.SUPPORTED_TYPES:
+        if entry.get('TYPE') in self.supported_device_types or entry.get('PARENT_TYPE') in self.supported_device_types:
           result.append(entry)
       self.devicecount.labels(self.ccu_host).set(len(result))
       return result
@@ -131,7 +140,7 @@ if __name__ == '__main__':
   parser.add_argument("--ccu_port", help="The port for the xmlrpc service", default=2010)
   parser.add_argument("--interval", help="The interval between two gathering runs", default=60)
   parser.add_argument("--port", help="The port where to expose the exporter", default=8010)
-  parser.add_argument("--mapping_file", help="A file with mapping from addresses to names")
+  parser.add_argument("--config_file", help="A config file with e.g. supported types and device name mappings")
   parser.add_argument("--debug", action="store_true")
   parser.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
   parser.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
@@ -142,7 +151,7 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-  processor = HomematicMetricsProcessor(args.ccu_host, args.ccu_port, args.interval, args.mapping_file)
+  processor = HomematicMetricsProcessor(args.ccu_host, args.ccu_port, args.interval, args.config_file)
 
   if args.dump_devices:
     print(pformat(processor.fetchDevicesList()))
