@@ -73,8 +73,8 @@ class HomematicMetricsProcessor(threading.Thread):
           logging.debug(pformat(device))
 
           if 'VALUES' in device.get('PARAMSETS'):
-            paramsetDescription = proxy.getParamsetDescription(devAddress, 'VALUES')
-            paramset = proxy.getParamset(devAddress, 'VALUES')
+            paramsetDescription = self.fetchParamSetDescription(devAddress)
+            paramset = self.fetchParamSet(devAddress)
 
             for key in paramsetDescription:
               paramDesc = paramsetDescription.get(key)
@@ -102,6 +102,10 @@ class HomematicMetricsProcessor(threading.Thread):
           result.append(entry)
       self.devicecount.labels(self.ccu_host).set(len(result))
       return result
+
+  def fetchParamSetDescription(self, address):
+    with self.createProxy() as proxy:
+      return proxy.getParamsetDescription(address, 'VALUES')
 
   def fetchParamSet(self, address):
     with self.createProxy() as proxy:
