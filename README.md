@@ -74,5 +74,5 @@ Only a configurable list of device types is supported so far (since I could only
 * the weather station (`HmIP-SWO-PL`)
 * the temperature and humidity sensor (`HmIP-STH`)
 
-If you want support for more devices, you can easily extend them via config file or wait for me to implement that. You can support that by donating the intended device :-).
+If you want support for more devices, you can easily extend them via config file or wait for me to implement that. You can support that by [donating](https://www.amazon.de/hz/wishlist/ls/342DL52U9EX2U?ref_=wl_share) the intended device :-).
 Feel free to open issues for unsupported items.
