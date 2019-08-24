@@ -15,7 +15,13 @@ import json
 class HomematicMetricsProcessor(threading.Thread):
 
   METRICS_NAMESPACE = 'homematic'
-  DEFAULT_SUPPORTED_TYPES = [ 'HmIP-SWO-PL', 'HmIP-STH' ]
+  DEFAULT_SUPPORTED_TYPES = [
+    'HmIP-SWO-PL',
+    'HmIP-STH',
+    'HmIP-STHD',
+    'HMIP-PSM',
+    'HmIP-FSM',
+    ]
 
   ccu_host = ''
   ccu_port = ''

@@ -1,7 +1,10 @@
 {
   "supported_device_types": [
     "HmIP-SWO-PL",
-    "HmIP-STH"
+    "HmIP-STH",
+    "HmIP-STHD",
+    "HmIP-PSM",
+    "HmIP-FSM"
   ],
   "device_mapping": {
     "00112233445566": "Garden",
