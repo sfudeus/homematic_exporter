@@ -11,6 +11,7 @@ import logging
 import threading
 import time
 import json
+import sys
 
 class HomematicMetricsProcessor(threading.Thread):
 
@@ -39,10 +40,19 @@ class HomematicMetricsProcessor(threading.Thread):
     logging.info("Supporting {} device types: {}".format(len(self.supported_device_types), ",".join(self.supported_device_types)))
 
     gathering_counter = Counter('gathering_count', 'Amount of gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+    error_counter = Counter('gathering_errors', 'Amount of failed gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
     while True:
-      self.generateMetrics()
       gathering_counter.labels(self.ccu_host).inc()
-      time.sleep(60)
+      try:
+        self.generateMetrics()
+      except OSError as osError:
+        logging.info("Failed to generate metrics: {0}".format(osError))
+        error_counter.labels(self.ccu_host).inc()
+      except:
+        logging.info("Failed to generate metrics: {0}".format(sys.exc_info()[0]))
+        error_counter.labels(self.ccu_host).inc()
+      finally:
+        time.sleep(self.gathering_interval)
 
   def __init__(self, ccu_host, ccu_port, gathering_interval, config_filename):
     super().__init__()
@@ -54,11 +64,11 @@ class HomematicMetricsProcessor(threading.Thread):
         self.mappedNames = config.get('device_mapping', {})
         self.supported_device_types = config.get('supported_device_types', self.DEFAULT_SUPPORTED_TYPES)
 
-      self.ccu_host = ccu_host
-      self.ccu_port = ccu_port
-      self.ccu_url = "http://{}:{}".format(args.ccu_host, args.ccu_port)
-      self.gathering_interval = gathering_interval
-      self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+    self.ccu_host = ccu_host
+    self.ccu_port = ccu_port
+    self.ccu_url = "http://{}:{}".format(args.ccu_host, args.ccu_port)
+    self.gathering_interval = int(gathering_interval)
+    self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
   def generateMetrics(self):
     logging.info("Gathering metrics")
