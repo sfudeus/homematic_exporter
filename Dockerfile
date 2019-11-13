@@ -1,4 +1,4 @@
-FROM python:3-alpine
+FROM python:3-slim-buster
 
 RUN pip3 install prometheus_client
 
