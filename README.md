@@ -78,3 +78,7 @@ Only a configurable list of device types is supported so far (since I could only
 
 If you want support for more devices, you can easily extend them via config file or wait for me to implement that. You can support that by [donating](https://www.amazon.de/hz/wishlist/ls/342DL52U9EX2U?ref_=wl_share) the intended device :-).
 Feel free to open issues for unsupported items.
+
+## Build
+
+For multi-architecture builds (x86, arm), e.g. use `docker buildx build --platform linux/amd64,linux/arm/v7 -t sfudeus/homematic_exporter:latest . --push`
