@@ -4,7 +4,8 @@
     "HmIP-STH",
     "HmIP-STHD",
     "HmIP-PSM",
-    "HmIP-FSM"
+    "HmIP-FSM",
+    "HmIP-SWD"
   ],
   "device_mapping": {
     "00112233445566": "Garden",
