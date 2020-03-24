@@ -96,7 +96,14 @@ class HomematicMetricsProcessor(threading.Thread):
               paramDesc = paramsetDescription.get(key)
               paramType = paramDesc.get('TYPE')
               if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
-                self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
+                self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('TYPE'))
+              elif paramType == 'ENUM':
+                logging.debug("Found {}: desc: {} key: {}".format(paramType,paramDesc,paramset.get(key)))
+                self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
+              else:
+                  # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
+                  # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
+                  logging.debug("Unknown paramType {}, desc: {}, key: {}".format(paramType, paramDesc, paramset.get(key)))
 
             if len(paramset)>0:
               logging.debug("ParamsetDescription for {}".format(devAddress))
@@ -127,13 +134,13 @@ class HomematicMetricsProcessor(threading.Thread):
     with self.createProxy() as proxy:
       return proxy.getParamset(address, 'VALUES')
 
-  def processSingleValue(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
+  def processSingleValue(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value, paramDesc):
     logging.debug("Found {} param {} with value {}".format(paramType, key, value))
 
     if value != None:
       gaugename = key.lower()
       if not self.metrics.get(gaugename):
-        self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
+        self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name', 'param_desc'], namespace=self.METRICS_NAMESPACE)
       gauge = self.metrics.get(gaugename)
       if deviceAddress in self.mappedNames:
         mappedName = self.mappedNames[deviceAddress]
@@ -141,7 +148,7 @@ class HomematicMetricsProcessor(threading.Thread):
         mappedName = self.mappedNames[parentDeviceAddress]
       else:
         mappedName = deviceAddress
-      gauge.labels(ccu=self.ccu_host, device=deviceAddress, device_type=deviceType, parent_device_type=parentDeviceType, mapped_name=mappedName).set(value)
+      gauge.labels(ccu=self.ccu_host, device=deviceAddress, device_type=deviceType, parent_device_type=parentDeviceType, mapped_name=mappedName, param_desc=paramDesc).set(value)
 
 class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
   """Thread per request HTTP server."""
