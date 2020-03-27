@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from prometheus_client import Gauge, Counter, Summary, MetricsHandler, core
+from prometheus_client import Gauge, Counter, Summary, Enum, MetricsHandler, core
 from pprint import pformat, pprint
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -73,22 +73,19 @@ class HomematicMetricsProcessor(threading.Thread):
   def generateMetrics(self):
     logging.info("Gathering metrics")
 
-    with self.createProxy() as proxy:
-      for device in self.fetchDevicesList():
-        devType = device.get('TYPE')
-        devParentType = device.get('PARENT_TYPE')
-        devParentAddress = device.get('PARENT')
-        devAddress = device.get('ADDRESS')
-        if devParentAddress == '' and devType in self.supported_device_types:
-          devChildcount = len(device.get('CHILDREN'))
-          logging.info("Found top-level device {} of type {} with {} children ".format(devAddress, devType, devChildcount))
-          logging.debug(pformat(device))
-
-        if devParentType in self.supported_device_types:
-          logging.debug("Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
-          logging.debug(pformat(device))
-
-          if 'VALUES' in device.get('PARAMSETS'):
+    for device in self.fetchDevicesList():
+      devType = device.get('TYPE')
+      devParentType = device.get('PARENT_TYPE')
+      devParentAddress = device.get('PARENT')
+      devAddress = device.get('ADDRESS')
+      if devParentAddress == '' and devType in self.supported_device_types:
+        devChildcount = len(device.get('CHILDREN'))
+        logging.info("Found top-level device {} of type {} with {} children ".format(devAddress, devType, devChildcount))
+        logging.debug(pformat(device))
+      if devParentType in self.supported_device_types:
+        logging.debug("Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
+        logging.debug(pformat(device))
+        if 'VALUES' in device.get('PARAMSETS'):
             paramsetDescription = self.fetchParamSetDescription(devAddress)
             paramset = self.fetchParamSet(devAddress)
 
@@ -96,10 +93,10 @@ class HomematicMetricsProcessor(threading.Thread):
               paramDesc = paramsetDescription.get(key)
               paramType = paramDesc.get('TYPE')
               if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
-                self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('TYPE'))
+                self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
               elif paramType == 'ENUM':
                 logging.debug("Found {}: desc: {} key: {}".format(paramType,paramDesc,paramset.get(key)))
-                self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
+                self.processEnum(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
               else:
                 # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
                 # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
@@ -134,21 +131,46 @@ class HomematicMetricsProcessor(threading.Thread):
     with self.createProxy() as proxy:
       return proxy.getParamset(address, 'VALUES')
 
-  def processSingleValue(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value, paramDesc):
+  def resolveMappedName(self, deviceAddress, parentDeviceAddress):
+    if deviceAddress in self.mappedNames:
+      return self.mappedNames[deviceAddress]
+    elif parentDeviceAddress in self.mappedNames:
+      return self.mappedNames[parentDeviceAddress]
+    else:
+      return deviceAddress
+
+  def processSingleValue(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
     logging.debug("Found {} param {} with value {}".format(paramType, key, value))
 
     if value != None:
       gaugename = key.lower()
       if not self.metrics.get(gaugename):
-        self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name', 'param_desc'], namespace=self.METRICS_NAMESPACE)
+        self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
       gauge = self.metrics.get(gaugename)
-      if deviceAddress in self.mappedNames:
-        mappedName = self.mappedNames[deviceAddress]
-      elif parentDeviceAddress in self.mappedNames:
-        mappedName = self.mappedNames[parentDeviceAddress]
-      else:
-        mappedName = deviceAddress
-      gauge.labels(ccu=self.ccu_host, device=deviceAddress, device_type=deviceType, parent_device_type=parentDeviceType, mapped_name=mappedName, param_desc=paramDesc).set(value)
+      gauge.labels(
+        ccu=self.ccu_host,
+        device=deviceAddress,
+        device_type=deviceType,
+        parent_device_type=parentDeviceType,
+        mapped_name=self.resolveMappedName(deviceAddress, parentDeviceAddress)).set(value)
+
+  def processEnum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value, istates):
+    if value == None:
+      return
+
+    logging.debug("Found {} param {} with value {}".format(paramType, key, value))
+
+    gaugename = key.lower()
+    if not self.metrics.get(gaugename):
+      self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
+    gauge = self.metrics.get(gaugename)
+    gauge.state(istates[int(value)])
+    gauge.labels(
+      ccu=self.ccu_host,
+      device=deviceAddress,
+      device_type=deviceType,
+      parent_device_type=parentDeviceType,
+      mapped_name=self.resolveMappedName(deviceAddress, parentDeviceAddress))
 
 class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
   """Thread per request HTTP server."""
