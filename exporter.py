@@ -158,9 +158,9 @@ class HomematicMetricsProcessor(threading.Thread):
     if value == None:
       return
 
-    logging.debug("Found {} param {} with value {}".format(paramType, key, value))
+    gaugename = key.lower()+"_set"
+    logging.debug("#Found {} param {} with value {}, gauge {}".format(paramType, key, value, gaugename))
 
-    gaugename = key.lower()
     if not self.metrics.get(gaugename):
       self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
     gauge = self.metrics.get(gaugename)
