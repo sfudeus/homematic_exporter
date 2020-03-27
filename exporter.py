@@ -98,12 +98,12 @@ class HomematicMetricsProcessor(threading.Thread):
               if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
                 self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('TYPE'))
               elif paramType == 'ENUM':
-                  logging.debug("Found {}: desc: {} key: {}".format(paramType,paramDesc,paramset.get(key)))
-                  self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
+                logging.debug("Found {}: desc: {} key: {}".format(paramType,paramDesc,paramset.get(key)))
+                self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
               else:
-                  # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
-                  # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
-                  logging.debug("Unknown paramType {}, desc: {}, key: {}".format(paramType, paramDesc, paramset.get(key)))
+                # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
+                # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
+                logging.debug("Unknown paramType {}, desc: {}, key: {}".format(paramType, paramDesc, paramset.get(key)))
 
             if len(paramset)>0:
               logging.debug("ParamsetDescription for {}".format(devAddress))
