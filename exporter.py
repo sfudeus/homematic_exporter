@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 
-from prometheus_client import Gauge, Counter, Summary, Enum, MetricsHandler, core
-from pprint import pformat, pprint
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from socketserver import ThreadingMixIn
-
 import xmlrpc.client
 import argparse
 import logging
@@ -12,6 +7,12 @@ import threading
 import time
 import json
 import sys
+
+from prometheus_client import Gauge, Counter, Summary, Enum, MetricsHandler, core
+from pprint import pformat, pprint
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+
 
 class HomematicMetricsProcessor(threading.Thread):
 
@@ -86,27 +87,27 @@ class HomematicMetricsProcessor(threading.Thread):
         logging.debug("Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
         logging.debug(pformat(device))
         if 'VALUES' in device.get('PARAMSETS'):
-            paramsetDescription = self.fetchParamSetDescription(devAddress)
-            paramset = self.fetchParamSet(devAddress)
+          paramsetDescription = self.fetchParamSetDescription(devAddress)
+          paramset = self.fetchParamSet(devAddress)
 
-            for key in paramsetDescription:
-              paramDesc = paramsetDescription.get(key)
-              paramType = paramDesc.get('TYPE')
-              if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
-                self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
-              elif paramType == 'ENUM':
-                logging.debug("Found {}: desc: {} key: {}".format(paramType,paramDesc,paramset.get(key)))
-                self.processEnum(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
-              else:
-                # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
-                # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
-                logging.debug("Unknown paramType {}, desc: {}, key: {}".format(paramType, paramDesc, paramset.get(key)))
+          for key in paramsetDescription:
+            paramDesc = paramsetDescription.get(key)
+            paramType = paramDesc.get('TYPE')
+            if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
+              self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
+            elif paramType == 'ENUM':
+              logging.debug("Found {}: desc: {} key: {}".format(paramType, paramDesc, paramset.get(key)))
+              self.process_enum(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
+            else:
+              # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
+              # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
+              logging.debug("Unknown paramType {}, desc: {}, key: {}".format(paramType, paramDesc, paramset.get(key)))
 
-            if len(paramset)>0:
-              logging.debug("ParamsetDescription for {}".format(devAddress))
-              logging.debug(pformat(paramsetDescription))
-              logging.debug("Paramset for {}".format(devAddress))
-              logging.debug(pformat(paramset))
+          if paramset:
+            logging.debug("ParamsetDescription for {}".format(devAddress))
+            logging.debug(pformat(paramsetDescription))
+            logging.debug("Paramset for {}".format(devAddress))
+            logging.debug(pformat(paramset))
 
   def createProxy(self):
     transport = xmlrpc.client.Transport()
@@ -131,7 +132,7 @@ class HomematicMetricsProcessor(threading.Thread):
     with self.createProxy() as proxy:
       return proxy.getParamset(address, 'VALUES')
 
-  def resolveMappedName(self, deviceAddress, parentDeviceAddress):
+  def resolve_mapped_name(self, deviceAddress, parentDeviceAddress):
     if deviceAddress in self.mappedNames:
       return self.mappedNames[deviceAddress]
     elif parentDeviceAddress in self.mappedNames:
@@ -152,9 +153,9 @@ class HomematicMetricsProcessor(threading.Thread):
         device=deviceAddress,
         device_type=deviceType,
         parent_device_type=parentDeviceType,
-        mapped_name=self.resolveMappedName(deviceAddress, parentDeviceAddress)).set(value)
+        mapped_name=self.resolve_mapped_name(deviceAddress, parentDeviceAddress)).set(value)
 
-  def processEnum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value, istates):
+  def process_enum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value, istates):
     if value == None:
       return
 
@@ -164,13 +165,16 @@ class HomematicMetricsProcessor(threading.Thread):
     if not self.metrics.get(gaugename):
       self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
     gauge = self.metrics.get(gaugename)
-    gauge.state(istates[int(value)])
+    mapped_name_v=self.resolve_mapped_name(deviceAddress, parentDeviceAddress)
+    state = istates[int(value)]
+    logging.debug("SETTING {} to value {} item {}".format(mapped_name_v, str(value), state))
     gauge.labels(
       ccu=self.ccu_host,
       device=deviceAddress,
       device_type=deviceType,
       parent_device_type=parentDeviceType,
-      mapped_name=self.resolveMappedName(deviceAddress, parentDeviceAddress))
+      mapped_name=mapped_name_v
+      ).state(state)
 
 class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
   """Thread per request HTTP server."""
@@ -211,4 +215,3 @@ if __name__ == '__main__':
     processor.start()
     # Start up the server to expose the metrics.
     start_http_server(int(args.port))
-
