@@ -76,6 +76,7 @@ Only a configurable list of device types is supported so far (since I could only
 * the pluggable switch/meter (`HMIP-PSM`)
 * the flush-mount switch/meter (`HmIP-FSM`)
 * the water sensor (`HmIP-SWD`)
+* window and door contact (`HMIP-SWDO`), thanks to @kremers
 
 If you want support for more devices, you can easily extend them via config file or wait for me to implement that. You can support that by [donating](https://www.amazon.de/hz/wishlist/ls/342DL52U9EX2U?ref_=wl_share) the intended device :-).
 Feel free to open issues for unsupported items.
@@ -83,3 +84,5 @@ Feel free to open issues for unsupported items.
 ## Build
 
 For multi-architecture builds (x86, arm), e.g. use `docker buildx build --platform linux/amd64,linux/arm/v7 -t sfudeus/homematic_exporter:latest . --push`
+
+You can usually find an up-to-date image for amd64 and arm at sfudeus/homematic_exporter:latest in docker hub.
