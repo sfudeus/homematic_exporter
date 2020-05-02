@@ -8,10 +8,10 @@ import time
 import json
 import sys
 
-from prometheus_client import Gauge, Counter, Summary, Enum, MetricsHandler, core
-from pprint import pformat, pprint
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
+from http.server import HTTPServer
+from pprint import pformat
+from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core
 
 
 class HomematicMetricsProcessor(threading.Thread):
@@ -31,7 +31,7 @@ class HomematicMetricsProcessor(threading.Thread):
   ccu_port = ''
   ccu_url = ''
   gathering_interval = 60
-  mappedNames = {}
+  mapped_names = {}
   supported_device_types = DEFAULT_SUPPORTED_TYPES
 
   device_count = None
@@ -39,7 +39,7 @@ class HomematicMetricsProcessor(threading.Thread):
 
   def run(self):
     logging.info("Starting thread for data gathering")
-    logging.info("Mapping {} devices with custom names".format(len(self.mappedNames)))
+    logging.info("Mapping {} devices with custom names".format(len(self.mapped_names)))
     logging.info("Supporting {} device types: {}".format(len(self.supported_device_types), ",".join(self.supported_device_types)))
 
     gathering_counter = Counter('gathering_count', 'Amount of gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
@@ -47,9 +47,9 @@ class HomematicMetricsProcessor(threading.Thread):
     while True:
       gathering_counter.labels(self.ccu_host).inc()
       try:
-        self.generateMetrics()
-      except OSError as osError:
-        logging.info("Failed to generate metrics: {0}".format(osError))
+        self.generate_metrics()
+      except OSError as os_error:
+        logging.info("Failed to generate metrics: {0}".format(os_error))
         error_counter.labels(self.ccu_host).inc()
       except:
         logging.info("Failed to generate metrics: {0}".format(sys.exc_info()[0]))
@@ -64,19 +64,19 @@ class HomematicMetricsProcessor(threading.Thread):
       with open(config_filename) as config_file:
         logging.info("Processing config file {}".format(config_filename))
         config = json.load(config_file)
-        self.mappedNames = config.get('device_mapping', {})
+        self.mapped_names = config.get('device_mapping', {})
         self.supported_device_types = config.get('supported_device_types', self.DEFAULT_SUPPORTED_TYPES)
 
     self.ccu_host = ccu_host
     self.ccu_port = ccu_port
-    self.ccu_url = "http://{}:{}".format(args.ccu_host, args.ccu_port)
+    self.ccu_url = "http://{}:{}".format(ccu_host, ccu_port)
     self.gathering_interval = int(gathering_interval)
     self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
-  def generateMetrics(self):
+  def generate_metrics(self):
     logging.info("Gathering metrics")
 
-    for device in self.fetchDevicesList():
+    for device in self.fetch_devices_list():
       devType = device.get('TYPE')
       devParentType = device.get('PARENT_TYPE')
       devParentAddress = device.get('PARENT')
@@ -89,14 +89,14 @@ class HomematicMetricsProcessor(threading.Thread):
         logging.debug("Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
         logging.debug(pformat(device))
         if 'VALUES' in device.get('PARAMSETS'):
-          paramsetDescription = self.fetchParamSetDescription(devAddress)
-          paramset = self.fetchParamSet(devAddress)
+          paramsetDescription = self.fetch_param_set_description(devAddress)
+          paramset = self.fetch_param_set(devAddress)
 
           for key in paramsetDescription:
             paramDesc = paramsetDescription.get(key)
             paramType = paramDesc.get('TYPE')
             if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
-              self.processSingleValue(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
+              self.process_single_value(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
             elif paramType == 'ENUM':
               logging.debug("Found {}: desc: {} key: {}".format(paramType, paramDesc, paramset.get(key)))
               self.process_enum(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
@@ -111,14 +111,14 @@ class HomematicMetricsProcessor(threading.Thread):
             logging.debug("Paramset for {}".format(devAddress))
             logging.debug(pformat(paramset))
 
-  def createProxy(self):
+  def create_proxy(self):
     transport = xmlrpc.client.Transport()
     connection = transport.make_connection(self.ccu_host)
     connection.timeout = 5
     return xmlrpc.client.ServerProxy(self.ccu_url, transport=transport)
 
-  def fetchDevicesList(self):
-    with self.createProxy() as proxy:
+  def fetch_devices_list(self):
+    with self.create_proxy() as proxy:
       result = []
       for entry in proxy.listDevices():
         if entry.get('TYPE') in self.supported_device_types or entry.get('PARENT_TYPE') in self.supported_device_types:
@@ -126,26 +126,26 @@ class HomematicMetricsProcessor(threading.Thread):
       self.devicecount.labels(self.ccu_host).set(len(result))
       return result
 
-  def fetchParamSetDescription(self, address):
-    with self.createProxy() as proxy:
+  def fetch_param_set_description(self, address):
+    with self.create_proxy() as proxy:
       return proxy.getParamsetDescription(address, 'VALUES')
 
-  def fetchParamSet(self, address):
-    with self.createProxy() as proxy:
+  def fetch_param_set(self, address):
+    with self.create_proxy() as proxy:
       return proxy.getParamset(address, 'VALUES')
 
   def resolve_mapped_name(self, deviceAddress, parentDeviceAddress):
-    if deviceAddress in self.mappedNames:
-      return self.mappedNames[deviceAddress]
-    elif parentDeviceAddress in self.mappedNames:
-      return self.mappedNames[parentDeviceAddress]
+    if deviceAddress in self.mapped_names:
+      return self.mapped_names[deviceAddress]
+    elif parentDeviceAddress in self.mapped_names:
+      return self.mapped_names[parentDeviceAddress]
     else:
       return deviceAddress
 
-  def processSingleValue(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
+  def process_single_value(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
     logging.debug("Found {} param {} with value {}".format(paramType, key, value))
 
-    if value != None:
+    if value is not None:
       gaugename = key.lower()
       if not self.metrics.get(gaugename):
         self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
@@ -158,18 +158,18 @@ class HomematicMetricsProcessor(threading.Thread):
         mapped_name=self.resolve_mapped_name(deviceAddress, parentDeviceAddress)).set(value)
 
   def process_enum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value, istates):
-    if value == None:
+    if value is None:
       return
 
     gaugename = key.lower()+"_set"
-    logging.debug("#Found {} param {} with value {}, gauge {}".format(paramType, key, value, gaugename))
+    logging.debug("Found {} param {} with value {}, gauge {}".format(paramType, key, value, gaugename))
 
     if not self.metrics.get(gaugename):
       self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
     gauge = self.metrics.get(gaugename)
-    mapped_name_v=self.resolve_mapped_name(deviceAddress, parentDeviceAddress)
+    mapped_name_v = self.resolve_mapped_name(deviceAddress, parentDeviceAddress)
     state = istates[int(value)]
-    logging.debug("SETTING {} to value {} item {}".format(mapped_name_v, str(value), state))
+    logging.debug("Setting {} to value {} item {}".format(mapped_name_v, str(value), state))
     gauge.labels(
       ccu=self.ccu_host,
       device=deviceAddress,
@@ -184,36 +184,35 @@ class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
 def start_http_server(port, addr='', registry=core.REGISTRY):
   """Starts an HTTP server for prometheus metrics as a daemon thread"""
   httpd = _ThreadingSimpleServer((addr, port), MetricsHandler.factory(registry))
-  t = threading.Thread(target=httpd.serve_forever)
-  t.daemon = False
-  t.start()
+  thread = threading.Thread(target=httpd.serve_forever)
+  thread.daemon = False
+  thread.start()
 
 if __name__ == '__main__':
 
-  parser = argparse.ArgumentParser()
-  parser.add_argument("--ccu_host", help="The hostname of the ccu instance", required=True)
-  parser.add_argument("--ccu_port", help="The port for the xmlrpc service", default=2010)
-  parser.add_argument("--interval", help="The interval between two gathering runs", default=60)
-  parser.add_argument("--port", help="The port where to expose the exporter", default=8010)
-  parser.add_argument("--config_file", help="A config file with e.g. supported types and device name mappings")
-  parser.add_argument("--debug", action="store_true")
-  parser.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
-  parser.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
-  args = parser.parse_args()
+  PARSER = argparse.ArgumentParser()
+  PARSER.add_argument("--ccu_host", help="The hostname of the ccu instance", required=True)
+  PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service", default=2010)
+  PARSER.add_argument("--interval", help="The interval between two gathering runs", default=60)
+  PARSER.add_argument("--port", help="The port where to expose the exporter", default=8010)
+  PARSER.add_argument("--config_file", help="A config file with e.g. supported types and device name mappings")
+  PARSER.add_argument("--debug", action="store_true")
+  PARSER.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
+  PARSER.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
+  ARGS = PARSER.parse_args()
 
-  if args.debug:
+  if ARGS.debug:
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
   else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-  processor = HomematicMetricsProcessor(args.ccu_host, args.ccu_port, args.interval, args.config_file)
+  PROCESSOR = HomematicMetricsProcessor(ARGS.ccu_host, ARGS.ccu_port, ARGS.interval, ARGS.config_file)
 
-  if args.dump_devices:
-    print(pformat(processor.fetchDevicesList()))
-  elif args.dump_parameters:
-    address = args.dump_parameters
-    print(pformat(processor.fetchParamSet(address)))
+  if ARGS.dump_devices:
+    print(pformat(PROCESSOR.fetch_devices_list()))
+  elif ARGS.dump_parameters:
+    print(pformat(PROCESSOR.fetch_param_set(ARGS.dump_parameters)))
   else:
-    processor.start()
+    PROCESSOR.start()
     # Start up the server to expose the metrics.
-    start_http_server(int(args.port))
+    start_http_server(int(ARGS.port))
