@@ -52,7 +52,7 @@ class HomematicMetricsProcessor(threading.Thread):
         logging.info("Failed to generate metrics: {0}".format(os_error))
         error_counter.labels(self.ccu_host).inc()
       except:
-        logging.info("Failed to generate metrics: {0}".format(sys.exc_info()[0]))
+        logging.info("Failed to generate metrics: {0}".format(sys.exc_info()))
         error_counter.labels(self.ccu_host).inc()
       finally:
         time.sleep(self.gathering_interval)
@@ -145,20 +145,22 @@ class HomematicMetricsProcessor(threading.Thread):
   def process_single_value(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
     logging.debug("Found {} param {} with value {}".format(paramType, key, value))
 
-    if value is not None:
-      gaugename = key.lower()
-      if not self.metrics.get(gaugename):
-        self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
-      gauge = self.metrics.get(gaugename)
-      gauge.labels(
-        ccu=self.ccu_host,
-        device=deviceAddress,
-        device_type=deviceType,
-        parent_device_type=parentDeviceType,
-        mapped_name=self.resolve_mapped_name(deviceAddress, parentDeviceAddress)).set(value)
+    if not value:
+      return
+
+    gaugename = key.lower()
+    if not self.metrics.get(gaugename):
+      self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
+    gauge = self.metrics.get(gaugename)
+    gauge.labels(
+      ccu=self.ccu_host,
+      device=deviceAddress,
+      device_type=deviceType,
+      parent_device_type=parentDeviceType,
+      mapped_name=self.resolve_mapped_name(deviceAddress, parentDeviceAddress)).set(value)
 
   def process_enum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value, istates):
-    if value is None:
+    if not value:
       return
 
     gaugename = key.lower()+"_set"
