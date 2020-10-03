@@ -10,7 +10,7 @@ The exporter can be run in different modes:
 
 * with `--dump_devices`, only the device list will be dumped and the script terminates (used for debugging purposes)
 * with `--dump_parameters <deviceAddress>`, the parameters of a single device are dumped and the script terminates (used for debugging purposes)
-* without special arguments (only `ccu_host`is mandatory) data is continuously gathered and exposed via HTTP
+* without special arguments (only `ccu_host` is mandatory) data is continuously gathered and exposed via HTTP
 
 ```bash
 
@@ -83,6 +83,6 @@ Feel free to open issues for unsupported items.
 
 ## Build
 
-For multi-architecture builds (x86, arm), e.g. use `docker buildx build --platform linux/amd64,linux/arm/v7 -t sfudeus/homematic_exporter:latest . --push`
+For multi-architecture builds (x86, arm), e.g. use `docker buildx build --platform linux/amd64,linux/arm/v7 -t sfudeus/homematic_exporter:latest .` or use `build.sh`.
 
-You can usually find an up-to-date image for amd64 and arm at sfudeus/homematic_exporter:latest in docker hub.
+You can usually find an up-to-date image for amd64 and arm at sfudeus/homematic_exporter:latest in [docker hub](https://hub.docker.com/r/sfudeus/homematic_exporter). Additionally, they are tagges with the build date to have a stable reference.
