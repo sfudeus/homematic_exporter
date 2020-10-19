@@ -1,8 +1,10 @@
 # homematic_exporter
 
-A simple tool to export data from [HomematicIP](https://www.homematic.com/) devices for consumption by [Prometheus](https://prometheus.io/), written in Python 3.
+A simple tool to export data from [Homematic](https://www.homematic.com/) devices for consumption by [Prometheus](https://prometheus.io/), written in Python 3.
 
 `homematic_exporter` will listen on a freely definable port and emit data in prometheus format which is periodically fetched via XML-RPC from CCU3. The fetching period is configurable, too.
+
+`homematic_exporter` was originally written for HomematicIP, but was verified to work with the BidCoS-RF devices as well (specifically HM-CC-RT-DN), just the respective port needs to be used (`2010` for HomematicIP and `2001` for BidCoS-RF)
 
 ## Usage
 
