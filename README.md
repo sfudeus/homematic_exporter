@@ -4,7 +4,7 @@ A simple tool to export data from [Homematic](https://www.homematic.com/) device
 
 `homematic_exporter` will listen on a freely definable port and emit data in prometheus format which is periodically fetched via XML-RPC from CCU3. The fetching period is configurable, too.
 
-`homematic_exporter` was originally written for HomematicIP, but was verified to work with the BidCoS-RF devices as well (specifically HM-CC-RT-DN), just the respective port needs to be used (`2010` for HomematicIP and `2001` for BidCoS-RF)
+`homematic_exporter` was originally written for HomematicIP, but was verified to work with the BidCoS-RF devices as well (specifically HM-CC-RT-DN and HM-WDS40-TH-I-2, thanks to @NilsGriebner), just the respective port needs to be used (`2010` for HomematicIP and `2001` for BidCoS-RF)
 
 ## Usage
 
@@ -79,6 +79,8 @@ Only a configurable list of device types is supported so far (since I could only
 * the flush-mount switch/meter (`HmIP-FSM`)
 * the water sensor (`HmIP-SWD`)
 * window and door contact (`HMIP-SWDO`), thanks to @kremers
+* BidCoS-RF radiator thermostat (`HM-CC-RT-DN`), thanks to @NilsGriebner
+* BidCoS-RF temperature and humidity sensor (`HM-WDS40-TH-I-2`), thanks to @NilsGriebner
 
 If you want support for more devices, you can easily extend them via config file or wait for me to implement that. You can support that by [donating](https://www.amazon.de/hz/wishlist/ls/342DL52U9EX2U?ref_=wl_share) the intended device :-).
 Feel free to open issues for unsupported items.

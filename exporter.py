@@ -25,6 +25,8 @@ class HomematicMetricsProcessor(threading.Thread):
     'HmIP-FSM',
     'HmIP-SWD',
     'HMIP-SWDO',
+    'HM-WDS40-TH-I-2',
+    'HM-CC-RT-DN',
     ]
 
   ccu_host = ''
