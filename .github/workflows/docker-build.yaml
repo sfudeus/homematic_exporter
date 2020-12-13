@@ -6,7 +6,6 @@ on:
   schedule:
   - cron:  '15 6 * * 0'
 
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,6 +34,6 @@ jobs:
       with:
         platforms: linux/amd64,linux/arm/v7
         tags: |
-          "sfudeus/powermeter_exporter:${{ steps.revision.outputs.target-revision }}"
-          "sfudeus/powermeter_exporter:latest"
+          "${{ github.repository }}:${{ steps.revision.outputs.target-revision }}"
+          "${{ github.repository }}:latest"
         push: true
