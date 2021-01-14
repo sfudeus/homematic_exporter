@@ -11,7 +11,7 @@ import sys
 from socketserver import ThreadingMixIn
 from http.server import HTTPServer
 from pprint import pformat
-from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core
+from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary
 
 
 class HomematicMetricsProcessor(threading.Thread):
@@ -46,10 +46,13 @@ class HomematicMetricsProcessor(threading.Thread):
 
     gathering_counter = Counter('gathering_count', 'Amount of gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
     error_counter = Counter('gathering_errors', 'Amount of failed gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+    generate_metrics_summary = Summary('generate_metrics_seconds', 'Time spent in gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+
     while True:
       gathering_counter.labels(self.ccu_host).inc()
       try:
-        self.generate_metrics()
+        with generate_metrics_summary.labels(self.ccu_host).time():
+          self.generate_metrics()
       except OSError as os_error:
         logging.info("Failed to generate metrics: {0}".format(os_error))
         error_counter.labels(self.ccu_host).inc()
