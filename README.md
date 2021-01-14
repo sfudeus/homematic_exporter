@@ -16,8 +16,9 @@ The exporter can be run in different modes:
 
 ```bash
 
-usage: exporter.py [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT] [--ccu_user CCU_USER] [--ccu_pass CCU_PASS] [--interval INTERVAL] [--port PORT] [--config_file CONFIG_FILE] [--debug]
-                   [--dump_devices] [--dump_parameters DUMP_PARAMETERS]
+usage: exporter.py [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT] [--ccu_user CCU_USER] [--ccu_pass CCU_PASS] [--interval INTERVAL]
+                   [--namereload NAMERELOAD] [--port PORT] [--config_file CONFIG_FILE]
+                   [--debug] [--dump_devices] [--dump_parameters DUMP_PARAMETERS]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -25,7 +26,9 @@ optional arguments:
   --ccu_port CCU_PORT   The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)
   --ccu_user CCU_USER   The username for the CCU (if authentication is enabled)
   --ccu_pass CCU_PASS   The password for the CCU (if authentication is enabled)
-  --interval INTERVAL   The interval between two gathering runs
+  --interval INTERVAL   The interval between two gathering runs in seconds
+  --namereload NAMERELOAD
+                        After how many intervals the device names are reloaded
   --port PORT           The port where to expose the exporter
   --config_file CONFIG_FILE
                         A config file with e.g. supported types and device name mappings
@@ -33,7 +36,6 @@ optional arguments:
   --dump_devices        Do not start exporter, just dump device list
   --dump_parameters DUMP_PARAMETERS
                         Do not start exporter, just dump device parameters of given device
-
 ```
 
 Can be used via docker as well.
@@ -65,7 +67,8 @@ optional arguments:
 
 Metrics are all prefixed with `homematic_`, the remaining name is based on the parameter name within the device descriptor.
 All metrics are equipped with labels for the `ccu` instance, the device address, device type and parent device type.
-In addition a device mapping can be added with a `--mapping_file`. Device addresses can be mapped to custom names which are then usable as labels in e.g. Grafana.
+In addition a device mapping can be added via `--config_file`. Device addresses can be mapped to custom names which are then usable as labels in e.g. Grafana.
+If no mappings are in the config file, the names from the CCU user interface are used.
 
 ## Restrictions
 
