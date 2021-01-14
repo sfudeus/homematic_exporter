@@ -11,7 +11,9 @@ import sys
 from socketserver import ThreadingMixIn
 from http.server import HTTPServer
 from pprint import pformat
-from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary
 
 
 class HomematicMetricsProcessor(threading.Thread):
@@ -33,6 +35,8 @@ class HomematicMetricsProcessor(threading.Thread):
   ccu_port = ''
   ccu_url = ''
   gathering_interval = 60
+  reload_names_active = False
+  reload_names_interval = 30 # reload names every 60 gatherings
   mapped_names = {}
   supported_device_types = DEFAULT_SUPPORTED_TYPES
 
@@ -46,7 +50,33 @@ class HomematicMetricsProcessor(threading.Thread):
 
     gathering_counter = Counter('gathering_count', 'Amount of gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
     error_counter = Counter('gathering_errors', 'Amount of failed gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+    read_names_summary = Summary('read_names_seconds', 'Time spent reading names from CCU', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+
+    gathering_loop_counter = 1
+    
+    if len(self.mapped_names) == 0:
+      # if no custom mapped names are given we use them from the ccu.
+      reload_names_active = True
+
+      with read_names_summary.labels(self.ccu_host).time():
+        self.mapped_names = self.read_mapped_names()
+      logging.info("Read {} device names from CCU".format(len(self.mapped_names)))
+
     while True:
+      if reload_names_active:
+        if gathering_loop_counter % self.reload_names_interval == 0:
+          try:
+            with read_names_summary.labels(self.ccu_host).time():
+              self.mapped_names = self.read_mapped_names()
+          except OSError as os_error:
+            logging.info("Failed to read device names: {0}".format(os_error))
+            error_counter.labels(self.ccu_host).inc()
+          except:
+            logging.info("Failed to read device names: {0}".format(sys.exc_info()))
+            error_counter.labels(self.ccu_host).inc()
+
+          logging.info("Read {} device names from CCU".format(len(self.mapped_names)))
+
       gathering_counter.labels(self.ccu_host).inc()
       try:
         self.generate_metrics()
@@ -58,8 +88,9 @@ class HomematicMetricsProcessor(threading.Thread):
         error_counter.labels(self.ccu_host).inc()
       finally:
         time.sleep(self.gathering_interval)
+      gathering_loop_counter += 1
 
-  def __init__(self, ccu_host, ccu_port, gathering_interval, config_filename):
+  def __init__(self, ccu_host, ccu_port, gathering_interval, reload_names_interval, config_filename):
     super().__init__()
 
     if config_filename:
@@ -73,6 +104,7 @@ class HomematicMetricsProcessor(threading.Thread):
     self.ccu_port = ccu_port
     self.ccu_url = "http://{}:{}".format(ccu_host, ccu_port)
     self.gathering_interval = int(gathering_interval)
+    self.reload_names_interval = int(reload_names_interval)
     self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
   def generate_metrics(self):
@@ -182,6 +214,51 @@ class HomematicMetricsProcessor(threading.Thread):
       mapped_name=mapped_name_v
       ).state(state)
 
+  def read_mapped_names(self):
+    # read mapped names via CCU TCL scripting
+    url = "http://{}:8181/tclrega.exe".format(self.ccu_host)
+
+    # this script returns the UI names of all devices (D), channels (C) and values (V).
+    # one entry per line, tab separated the type, address, UI name and ID.
+    # inspired by https://github.com/mdzio/ccu-historian/blob/master/hc-utils/src/mdz/hc/itf/hm/HmScriptClient.groovy
+    script_get_names="""
+      string id; foreach(id, root.Devices().EnumIDs()) {
+			  var device=dom.GetObject(id);
+			  if (device.ReadyConfig()==true && device.Name()!='Gateway') {
+  			  WriteLine("D\t" # device.Address() # "\t" # device.Name() # "\t" # id);
+
+			    if (device.Type()==OT_DEVICE) {
+				    string chId; foreach(chId, device.Channels()) {
+					    var ch=dom.GetObject(chId);
+					    WriteLine("C\t" # ch.Address() # "\t" # ch.Name() # "\t" # chId);
+					    string dpId; foreach(dpId, ch.DPs()) {
+        			  var dp=dom.GetObject(dpId);
+        			  WriteLine("V\t" # dp.Name() # "\t" # dpId);
+              }
+            }
+					}
+			  }
+		  }
+      """
+
+    request = Request(url, script_get_names.encode(encoding='ISO-8859-1'))
+    response = urlopen(request).read().decode(encoding='ISO-8859-1')
+    logging.debug(response)
+
+    ccu_mapped_names = {}
+
+    # parse the returned lines
+    lines = response.splitlines()
+    for line in lines:
+      # ignore last line that starts with <xml><exec>
+      if not line.startswith("<xml><exec>"):
+        line_parts = line.split("\t")
+        if len(line_parts)==4 and (line_parts[0]=="D" or line_parts[0]=="C"):
+          # for devices and channels
+          ccu_mapped_names[line_parts[1]] = line_parts[2]
+ 
+    return ccu_mapped_names
+
 class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
   """Thread per request HTTP server."""
 
@@ -197,7 +274,8 @@ if __name__ == '__main__':
   PARSER = argparse.ArgumentParser()
   PARSER.add_argument("--ccu_host", help="The hostname of the ccu instance", required=True)
   PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service", default=2010)
-  PARSER.add_argument("--interval", help="The interval between two gathering runs", default=60)
+  PARSER.add_argument("--interval", help="The interval between two gathering runs in seconds", default=60)
+  PARSER.add_argument("--namereload", help="After how many intervals the device names are reloaded", default=30)
   PARSER.add_argument("--port", help="The port where to expose the exporter", default=8010)
   PARSER.add_argument("--config_file", help="A config file with e.g. supported types and device name mappings")
   PARSER.add_argument("--debug", action="store_true")
@@ -210,7 +288,7 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-  PROCESSOR = HomematicMetricsProcessor(ARGS.ccu_host, ARGS.ccu_port, ARGS.interval, ARGS.config_file)
+  PROCESSOR = HomematicMetricsProcessor(ARGS.ccu_host, ARGS.ccu_port, ARGS.interval, ARGS.namereload, ARGS.config_file)
 
   if ARGS.dump_devices:
     print(pformat(PROCESSOR.fetch_devices_list()))
