@@ -17,17 +17,76 @@ from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summar
 class HomematicMetricsProcessor(threading.Thread):
 
   METRICS_NAMESPACE = 'homematic'
+  # Supported Homematic (BidcosRF and IP) device types
   DEFAULT_SUPPORTED_TYPES = [
-    'HmIP-SWO-PL',
+    'HmIP-eTRV-2',
+    'HmIP-FSM',
+    'HMIP-PSM',
+    'HmIP-RCV-1',
     'HmIP-STH',
     'HmIP-STHD',
-    'HMIP-PSM',
-    'HmIP-FSM',
     'HmIP-SWD',
     'HMIP-SWDO',
-    'HM-WDS40-TH-I-2',
+    'HmIP-SWSD',
+    'HmIP-SWO-PL',
+    'HmIP-SWO-PR',
+    'HmIP-WTH-2',
     'HM-CC-RT-DN',
+    'HM-Dis-EP-WM55',
+    'HM-Dis-WM55',
+    'HM-ES-PMSw1-Pl-DN-R5',
+    'HM-ES-TX-WM',
+    'HM-LC-Bl1-FM',
+    'HM-LC-Dim1PWM-CV',
+    'HM-LC-Dim1T-FM',
+    'HM-LC-RGBW-WM',
+    'HM-LC-Sw1-Pl-DN-R5',
+    'HM-LC-Sw1-FM',
+    'HM-LC-Sw2-FM',
+    'HM-OU-CFM-Pl',
+    'HM-OU-CFM-TW',
+    'HM-PBI-4-FM',
+    'HM-PB-2-WM55',
+    'HM-PB-6-WM55',
+    'HM-RC-P1',
+    'HM-RC-4-2',
+    'HM-RC-8',
+    'HM-Sec-MDIR-2',
+    'HM-Sec-SCo',
+    'HM-Sec-SC-2',
+    'HM-Sec-SD-2',
+    'HM-Sec-TiS',
+    'HM-Sen-LI-O',
+    'HM-Sen-MDIR-O',
+    'HM-Sen-MDIR-WM55',
+    'HM-SwI-3-FM',
+    'HM-TC-IT-WM-W-EU',
+    'HM-WDS10-TH-O',
+    'HM-WDS100-C6-O-2',
+    'HM-WDS30-OT2-SM',
+    'HM-WDS40-TH-I-2',
     ]
+
+  # A list with channel numbers for devices where getParamset
+  # never works, or only sometimes works (e.g. if the device sent
+  # no data since the last CCU reboot).
+  DEFAULT_CHANNELS_WITH_ERRORS_ALLOWED = {
+    'HM-ES-PMSw1-Pl-DN-R5': [1, 2],
+    'HM-ES-TX-WM': [1],
+    'HM-LC-Bl1-FM': [1],
+    'HM-LC-Dim1PWM-CV': [1, 2, 3],
+    'HM-LC-Dim1T-FM': [1],
+    'HM-LC-RGBW-WM': [1, 2, 3],
+    'HM-LC-Sw1-Pl-DN-R5': [1],
+    'HM-LC-Sw1-FM': [1, 2],
+    'HM-LC-Sw2-FM': [1, 2],
+    'HM-OU-CFM-Pl': [1, 2],
+    'HM-OU-CFM-TW': [1, 2],
+    'HM-Sen-MDIR-O': [1],
+    'HM-Sen-MDIR-WM55': [3],
+    'HM-TC-IT-WM-W-EU': [7],
+    'HM-WDS30-OT2-SM': [1, 2, 3, 4, 5],
+    }
 
   ccu_host = ''
   ccu_port = ''
@@ -35,6 +94,7 @@ class HomematicMetricsProcessor(threading.Thread):
   gathering_interval = 60
   mapped_names = {}
   supported_device_types = DEFAULT_SUPPORTED_TYPES
+  channels_with_errors_allowed = DEFAULT_CHANNELS_WITH_ERRORS_ALLOWED
 
   device_count = None
   metrics = {}
@@ -71,6 +131,7 @@ class HomematicMetricsProcessor(threading.Thread):
         config = json.load(config_file)
         self.mapped_names = config.get('device_mapping', {})
         self.supported_device_types = config.get('supported_device_types', self.DEFAULT_SUPPORTED_TYPES)
+        self.channels_with_errors_allowed = config.get('channels_with_errors_allowed', self.DEFAULT_CHANNELS_WITH_ERRORS_ALLOWED)
 
     self.ccu_host = ccu_host
     self.ccu_port = ccu_port
@@ -86,16 +147,34 @@ class HomematicMetricsProcessor(threading.Thread):
       devParentType = device.get('PARENT_TYPE')
       devParentAddress = device.get('PARENT')
       devAddress = device.get('ADDRESS')
-      if devParentAddress == '' and devType in self.supported_device_types:
-        devChildcount = len(device.get('CHILDREN'))
-        logging.info("Found top-level device {} of type {} with {} children ".format(devAddress, devType, devChildcount))
-        logging.debug(pformat(device))
+      if devParentAddress == '':
+        if devType in self.supported_device_types:
+          devChildcount = len(device.get('CHILDREN'))
+          logging.info("Found top-level device {} of type {} with {} children".format(devAddress, devType, devChildcount))
+          logging.debug(pformat(device))
+        else:
+          logging.info("Found unsupported top-level device {} of type {}".format(devAddress, devType))
       if devParentType in self.supported_device_types:
         logging.debug("Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
         logging.debug(pformat(device))
+
+        allowFailedChannel = False
+        invalidChannels = self.channels_with_errors_allowed.get(devParentType)
+        if invalidChannels is not None:
+          channel = int(devAddress[devAddress.find(":")+1:])
+          if channel in invalidChannels:
+            allowFailedChannel = True
+
         if 'VALUES' in device.get('PARAMSETS'):
           paramsetDescription = self.fetch_param_set_description(devAddress)
-          paramset = self.fetch_param_set(devAddress)
+          try:
+            paramset = self.fetch_param_set(devAddress)
+          except xmlrpc.client.Fault:
+            if allowFailedChannel:
+              logging.debug("Error reading paramset for device {} of type {} in parent type {} (expected)".format(devAddress, devType, devParentType))
+            else:
+              logging.debug("Error reading paramset for device {} of type {} in parent type {} (unexpected)".format(devAddress, devType, devParentType))
+              raise
 
           for key in paramsetDescription:
             paramDesc = paramsetDescription.get(key)
@@ -126,8 +205,7 @@ class HomematicMetricsProcessor(threading.Thread):
     with self.create_proxy() as proxy:
       result = []
       for entry in proxy.listDevices():
-        if entry.get('TYPE') in self.supported_device_types or entry.get('PARENT_TYPE') in self.supported_device_types:
-          result.append(entry)
+        result.append(entry)
       self.devicecount.labels(self.ccu_host).set(len(result))
       return result
 
@@ -199,7 +277,7 @@ if __name__ == '__main__':
 
   PARSER = argparse.ArgumentParser()
   PARSER.add_argument("--ccu_host", help="The hostname of the ccu instance", required=True)
-  PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service", default=2010)
+  PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)", default=2010)
   PARSER.add_argument("--interval", help="The interval between two gathering runs", default=60)
   PARSER.add_argument("--port", help="The port where to expose the exporter", default=8010)
   PARSER.add_argument("--config_file", help="A config file with e.g. supported types and device name mappings")
@@ -218,6 +296,9 @@ if __name__ == '__main__':
   if ARGS.dump_devices:
     print(pformat(PROCESSOR.fetch_devices_list()))
   elif ARGS.dump_parameters:
+#    print("getParamsetDescription:")
+#    print(pformat(PROCESSOR.fetch_param_set_description(ARGS.dump_parameters)))
+    print("getParamset:")
     print(pformat(PROCESSOR.fetch_param_set(ARGS.dump_parameters)))
   else:
     PROCESSOR.start()
