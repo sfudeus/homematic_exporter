@@ -33,7 +33,7 @@ jobs:
     - name: Docker build/push
       uses: docker/build-push-action@v2
       with:
-        platforms: linux/amd64,linux/arm/v7
+        platforms: linux/amd64,linux/arm/v7,linux/arm64
         tags: |
           "${{ github.repository }}:${{ steps.revision.outputs.target-revision }}"
           "${{ github.repository }}:latest"
