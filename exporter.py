@@ -228,7 +228,7 @@ class HomematicMetricsProcessor(threading.Thread):
   def process_single_value(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
     logging.debug("Found {} param {} with value {}".format(paramType, key, value))
 
-    if not value:
+    if value is '' or value is None:
       return
 
     gaugename = key.lower()
