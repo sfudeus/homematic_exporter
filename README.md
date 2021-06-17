@@ -16,25 +16,24 @@ The exporter can be run in different modes:
 
 ```bash
 
-usage: exporter.py [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT]
-                   [--interval INTERVAL] [--port PORT]
-                   [--config_file CONFIG_FILE] [--debug] [--dump_devices]
-                   [--dump_parameters DUMP_PARAMETERS]
+usage: exporter.py [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT] [--ccu_user CCU_USER] [--ccu_pass CCU_PASS] [--interval INTERVAL] [--port PORT] [--config_file CONFIG_FILE] [--debug]
+                   [--dump_devices] [--dump_parameters DUMP_PARAMETERS]
 
 optional arguments:
   -h, --help            show this help message and exit
   --ccu_host CCU_HOST   The hostname of the ccu instance
-  --ccu_port CCU_PORT   The port for the xmlrpc service
+  --ccu_port CCU_PORT   The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)
+  --ccu_user CCU_USER   The username for the CCU (if authentication is enabled)
+  --ccu_pass CCU_PASS   The password for the CCU (if authentication is enabled)
   --interval INTERVAL   The interval between two gathering runs
   --port PORT           The port where to expose the exporter
   --config_file CONFIG_FILE
-                        A config file with e.g. supported types and device
-                        name mappings
+                        A config file with e.g. supported types and device name mappings
   --debug
   --dump_devices        Do not start exporter, just dump device list
   --dump_parameters DUMP_PARAMETERS
-                        Do not start exporter, just dump device parameters of
-                        given device
+                        Do not start exporter, just dump device parameters of given device
+
 ```
 
 Can be used via docker as well.
@@ -42,25 +41,24 @@ Can be used via docker as well.
 ```bash
 
 > $ docker run --rm sfudeus/homematic_exporter --help
-usage: homematic_exporter [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT]
-                          [--interval INTERVAL] [--port PORT]
-                          [--config_file CONFIG_FILE] [--debug]
-                          [--dump_devices] [--dump_parameters DUMP_PARAMETERS]
+usage: exporter.py [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT] [--ccu_user CCU_USER] [--ccu_pass CCU_PASS] [--interval INTERVAL] [--port PORT] [--config_file CONFIG_FILE] [--debug]
+                   [--dump_devices] [--dump_parameters DUMP_PARAMETERS]
 
 optional arguments:
   -h, --help            show this help message and exit
   --ccu_host CCU_HOST   The hostname of the ccu instance
-  --ccu_port CCU_PORT   The port for the xmlrpc service
+  --ccu_port CCU_PORT   The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)
+  --ccu_user CCU_USER   The username for the CCU (if authentication is enabled)
+  --ccu_pass CCU_PASS   The password for the CCU (if authentication is enabled)
   --interval INTERVAL   The interval between two gathering runs
   --port PORT           The port where to expose the exporter
   --config_file CONFIG_FILE
-                        A config file with e.g. supported types and device
-                        name mappings
+                        A config file with e.g. supported types and device name mappings
   --debug
   --dump_devices        Do not start exporter, just dump device list
   --dump_parameters DUMP_PARAMETERS
-                        Do not start exporter, just dump device parameters of
-                        given device
+                        Do not start exporter, just dump device parameters of given device
+
 ```
 
 ## Metrics

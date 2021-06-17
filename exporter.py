@@ -91,6 +91,7 @@ class HomematicMetricsProcessor(threading.Thread):
   ccu_host = ''
   ccu_port = ''
   ccu_url = ''
+  auth = None
   gathering_interval = 60
   mapped_names = {}
   supported_device_types = DEFAULT_SUPPORTED_TYPES
@@ -122,7 +123,7 @@ class HomematicMetricsProcessor(threading.Thread):
       finally:
         time.sleep(self.gathering_interval)
 
-  def __init__(self, ccu_host, ccu_port, gathering_interval, config_filename):
+  def __init__(self, ccu_host, ccu_port, auth, gathering_interval, config_filename):
     super().__init__()
 
     if config_filename:
@@ -135,7 +136,10 @@ class HomematicMetricsProcessor(threading.Thread):
 
     self.ccu_host = ccu_host
     self.ccu_port = ccu_port
-    self.ccu_url = "http://{}:{}".format(ccu_host, ccu_port)
+    if auth:
+      self.ccu_url = "http://{}:{}@{}:{}".format(auth[0], auth[1], ccu_host, ccu_port)
+    else:
+      self.ccu_url = "http://{}:{}".format(ccu_host, ccu_port)
     self.gathering_interval = int(gathering_interval)
     self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
@@ -228,7 +232,7 @@ class HomematicMetricsProcessor(threading.Thread):
   def process_single_value(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
     logging.debug("Found {} param {} with value {}".format(paramType, key, value))
 
-    if value is '' or value is None:
+    if value == '' or value is None:
       return
 
     gaugename = key.lower()
@@ -278,6 +282,8 @@ if __name__ == '__main__':
   PARSER = argparse.ArgumentParser()
   PARSER.add_argument("--ccu_host", help="The hostname of the ccu instance", required=True)
   PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)", default=2010)
+  PARSER.add_argument("--ccu_user", help="The username for the CCU (if authentication is enabled)")
+  PARSER.add_argument("--ccu_pass", help="The password for the CCU (if authentication is enabled)")
   PARSER.add_argument("--interval", help="The interval between two gathering runs", default=60)
   PARSER.add_argument("--port", help="The port where to expose the exporter", default=8010)
   PARSER.add_argument("--config_file", help="A config file with e.g. supported types and device name mappings")
@@ -291,7 +297,11 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-  PROCESSOR = HomematicMetricsProcessor(ARGS.ccu_host, ARGS.ccu_port, ARGS.interval, ARGS.config_file)
+  auth = None
+  if ARGS.ccu_user and ARGS.ccu_pass:
+    auth = (ARGS.ccu_user, ARGS.ccu_pass)
+
+  PROCESSOR = HomematicMetricsProcessor(ARGS.ccu_host, ARGS.ccu_port, auth, ARGS.interval, ARGS.config_file)
 
   if ARGS.dump_devices:
     print(pformat(PROCESSOR.fetch_devices_list()))
