@@ -6,13 +6,13 @@ import logging
 import threading
 import time
 import json
+import re
 import sys
 
 from socketserver import ThreadingMixIn
 from http.server import HTTPServer
 from pprint import pformat
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+import requests
 from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary
 
 
@@ -167,6 +167,7 @@ class HomematicMetricsProcessor(threading.Thread):
     self.ccu_host = ccu_host
     self.ccu_port = ccu_port
     if auth:
+      self.auth = auth
       self.ccu_url = "http://{}:{}@{}:{}".format(auth[0], auth[1], ccu_host, ccu_port)
     else:
       self.ccu_url = "http://{}:{}".format(ccu_host, ccu_port)
@@ -252,8 +253,11 @@ class HomematicMetricsProcessor(threading.Thread):
     with self.create_proxy() as proxy:
       return proxy.getParamset(address, 'VALUES')
 
+  def is_default_device_address(self, deviceAddress):
+    return re.match("^[0-9a-f]{14}:[0-9]+$", deviceAddress, re.IGNORECASE)
+
   def resolve_mapped_name(self, deviceAddress, parentDeviceAddress):
-    if deviceAddress in self.mapped_names:
+    if deviceAddress in self.mapped_names and not self.is_default_device_address(deviceAddress):
       return self.mapped_names[deviceAddress]
     elif parentDeviceAddress in self.mapped_names:
       return self.mapped_names[parentDeviceAddress]
@@ -298,48 +302,47 @@ class HomematicMetricsProcessor(threading.Thread):
       mapped_name=mapped_name_v
       ).state(state)
 
+
   def read_mapped_names(self):
-    # read mapped names via CCU TCL scripting
+    """Reads mapped names via CCU TCL script, returns a dict of device address to device name"""
     url = "http://{}:8181/tclrega.exe".format(self.ccu_host)
 
-    # this script returns the UI names of all devices (D), channels (C) and values (V).
+    # this script returns the UI names of all devices (D), channels (C).
     # one entry per line, tab separated the type, address, UI name and ID.
     # inspired by https://github.com/mdzio/ccu-historian/blob/master/hc-utils/src/mdz/hc/itf/hm/HmScriptClient.groovy
     script_get_names="""
-      string id; foreach(id, root.Devices().EnumIDs()) {
+      string id;
+      foreach(id, root.Devices().EnumIDs()) {
 			  var device=dom.GetObject(id);
 			  if (device.ReadyConfig()==true && device.Name()!='Gateway') {
   			  WriteLine("D\t" # device.Address() # "\t" # device.Name() # "\t" # id);
 
 			    if (device.Type()==OT_DEVICE) {
-				    string chId; foreach(chId, device.Channels()) {
+				    string chId;
+            foreach(chId, device.Channels()) {
 					    var ch=dom.GetObject(chId);
 					    WriteLine("C\t" # ch.Address() # "\t" # ch.Name() # "\t" # chId);
-					    string dpId; foreach(dpId, ch.DPs()) {
-        			  var dp=dom.GetObject(dpId);
-        			  WriteLine("V\t" # dp.Name() # "\t" # dpId);
-              }
             }
 					}
 			  }
 		  }
       """
 
-    request = Request(url, script_get_names.encode(encoding='ISO-8859-1'))
-    response = urlopen(request).read().decode(encoding='ISO-8859-1')
-    logging.debug(response)
+    response = requests.post(url, auth=auth, data=script_get_names)
+    logging.debug(response.text)
 
     ccu_mapped_names = {}
 
     # parse the returned lines
-    lines = response.splitlines()
+    lines = response.text.splitlines()
     for line in lines:
+
       # ignore last line that starts with <xml><exec>
-      if not line.startswith("<xml><exec>"):
-        line_parts = line.split("\t")
-        if len(line_parts)==4 and (line_parts[0]=="D" or line_parts[0]=="C"):
-          # for devices and channels
-          ccu_mapped_names[line_parts[1]] = line_parts[2]
+      if line.startswith("<xml><exec>"):
+        continue
+
+      (type, address, name, *id) = line.split("\t")
+      ccu_mapped_names[address] = name
 
     return ccu_mapped_names
 
@@ -357,7 +360,7 @@ if __name__ == '__main__':
 
   PARSER = argparse.ArgumentParser()
   PARSER.add_argument("--ccu_host", help="The hostname of the ccu instance", required=True)
-  PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service", default=2010)
+  PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)", default=2010)
   PARSER.add_argument("--ccu_user", help="The username for the CCU (if authentication is enabled)")
   PARSER.add_argument("--ccu_pass", help="The password for the CCU (if authentication is enabled)")
   PARSER.add_argument("--interval", help="The interval between two gathering runs in seconds", default=60)
@@ -367,6 +370,7 @@ if __name__ == '__main__':
   PARSER.add_argument("--debug", action="store_true")
   PARSER.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
   PARSER.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
+  PARSER.add_argument("--dump_device_names", help="Do not start exporter, just dump device names", action="store_true")
   ARGS = PARSER.parse_args()
 
   if ARGS.debug:
@@ -387,7 +391,10 @@ if __name__ == '__main__':
 #    print(pformat(PROCESSOR.fetch_param_set_description(ARGS.dump_parameters)))
     print("getParamset:")
     print(pformat(PROCESSOR.fetch_param_set(ARGS.dump_parameters)))
+  elif ARGS.dump_device_names:
+    print(pformat(PROCESSOR.read_mapped_names()))
   else:
     PROCESSOR.start()
     # Start up the server to expose the metrics.
+    logging.info("Exposing metrics on port {}".format(ARGS.port))
     start_http_server(int(ARGS.port))
