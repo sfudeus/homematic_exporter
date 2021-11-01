@@ -74,6 +74,24 @@ All metrics are equipped with labels for the `ccu` instance, the device address,
 In addition a device mapping can be added via `--config_file`. Device addresses can be mapped to custom names which are then usable as labels in e.g. Grafana.
 If no mappings are in the config file, the names from the CCU user interface are used and exposed as label `mapped_name`.
 
+## CCU configuration
+
+The CCU needs to be configured to be able to fetch data.
+
+* For the general functionality, the XML-RPC interface (port 2001, 2010) must be accessible\
+(`Settings -> Control panel -> Configure firewall -> XML-RPC API`)
+* For retrieving device names from the CCU, the Script API (port 8181) has to be enabled\
+(`Settings -> Control panel -> Configure firewall -> Script API`)\
+By providing a device mapping configuration, no access to the Script API is required.
+
+`Restricted access` is sufficient if the exporter is running on a host whitelisted for restricted access\
+`(Settings -> Control panel -> Configure firewall -> IP addresses for restricted access)`.\
+Otherwise you'd need `Full access`.
+
+It is highly advisable to enable authentication\
+(`Settings -> Control panel -> Security -> Authentication`).
+Credentials are provided via `--ccu_user` and `--ccu_pass`.
+
 ## Restrictions
 
 Only a configurable list of device types is supported so far (since I could only test those). Currently these are:
