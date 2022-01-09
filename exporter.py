@@ -119,14 +119,14 @@ class HomematicMetricsProcessor(threading.Thread):
 
         if len(self.mapped_names) == 0:
             # if no custom mapped names are given we use them from the ccu.
-            reload_names_active = True
+            self.reload_names_active = True
 
             with read_names_summary.labels(self.ccu_host).time():
                 self.mapped_names = self.read_mapped_names()
             logging.info("Read {} device names from CCU".format(len(self.mapped_names)))
 
         while True:
-            if reload_names_active:
+            if self.reload_names_active:
                 if gathering_loop_counter % self.reload_names_interval == 0:
                     try:
                         with read_names_summary.labels(self.ccu_host).time():
@@ -333,8 +333,11 @@ class HomematicMetricsProcessor(threading.Thread):
 		  }
       """
 
-        response = requests.post(url, auth=auth, data=script_get_names)
+        response = requests.post(url, auth=self.auth, data=script_get_names)
         logging.debug(response.text)
+        if response.status_code != 200:
+            logging.warning("Failed to read name mappings, status code was %d", response.status_code)
+            return {}
 
         ccu_mapped_names = {}
 
