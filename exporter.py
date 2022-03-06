@@ -66,6 +66,7 @@ class HomematicMetricsProcessor(threading.Thread):
         'HM-WDS10-TH-O',
         'HM-WDS100-C6-O-2',
         'HM-WDS30-OT2-SM',
+        'HM-WDS40-TH-I',
         'HM-WDS40-TH-I-2',
     ]
 
