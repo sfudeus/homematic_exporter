@@ -1,10 +1,9 @@
-name: Docker Build/Publish Release
+name: Docker Build/Publish Preview Image from branch
 on:
   push:
-    tags:
-    - "*"
-  schedule:
-  - cron:  '15 6 * * 0'
+    branches-ignore:
+    - master
+    - main
   workflow_dispatch: {}
 
 jobs:
@@ -19,8 +18,7 @@ jobs:
     - name: Define revision
       id: revision
       run: |
-        REVISION=$(date +%F)
-        echo "::set-output name=target-revision::$REVISION"
+        echo "::set-output name=target-revision::preview-${GITHUB_REF##*/}"
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v1
     - name: Set up Docker Buildx
@@ -36,5 +34,4 @@ jobs:
         platforms: linux/amd64,linux/arm/v7,linux/arm64
         tags: |
           "${{ github.repository }}:${{ steps.revision.outputs.target-revision }}"
-          "${{ github.repository }}:latest"
         push: true
