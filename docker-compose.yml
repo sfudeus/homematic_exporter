@@ -14,7 +14,7 @@ services:
 #    networks:
 #      - traefik
     ports:
-      - 8888:8010
+      - 8010:8010
     command: --ccu_host "$CCU_HOST" --ccu_user "$CCU_USER" --ccu_pass "$CCU_PASS" --debug
 #    labels:
 #      - traefik.enable=true
