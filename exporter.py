@@ -68,6 +68,14 @@ class HomematicMetricsProcessor(threading.Thread):
         'HM-WDS30-OT2-SM',
         'HM-WDS40-TH-I',
         'HM-WDS40-TH-I-2',
+        'HmIP-BDT',                     # Homematic IP Dimmaktor für Markenschalter, Unterputzmontage
+        'HmIP-DBB',                     # Homematic IP Türklingeltaster
+        'HMIP-eTRV',                    # Homematic IP Heizkörperthermostat
+        'HmIP-eTRV-B1',                 # Homematic IP Heizkörperthermostat - basic
+        'HmIP-SRH',                     # Homematic IP Fenster-/ Drehgriffkontakt
+        'HMIP-WRC2',                    # Homematic IP Wandtaster 2-fach
+        'HmIP-WRC6',                    # Homematic IP Wandtaster 6-fach
+        'HMIP-WTH',                     # Homematic IP Wandthermostat
     ]
 
     # A list with channel numbers for devices where getParamset
@@ -220,15 +228,18 @@ class HomematicMetricsProcessor(threading.Thread):
                         paramDesc = paramsetDescription.get(key)
                         paramType = paramDesc.get('TYPE')
                         if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
+                            logging.debug("Found {}: desc: {} key: {}".format(paramType, paramDesc, paramset.get(key)))
                             self.process_single_value(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
                         elif paramType == 'ENUM':
                             logging.debug("Found {}: desc: {} key: {}".format(paramType, paramDesc, paramset.get(key)))
                             self.process_enum(devAddress, devType, devParentAddress, devParentType,
                                               paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
+                        elif paramType in ['ACTION', 'STRING']:
+                            logging.debug("Ignoring unsupported paramType {}, desc: {}, key: {}".format(paramType, paramDesc, paramset.get(key)))
                         else:
                             # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
                             # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
-                            logging.debug("Unknown paramType {}, desc: {}, key: {}".format(paramType, paramDesc, paramset.get(key)))
+                            logging.debug("Unknown unsupported paramType {}, desc: {}, key: {}".format(paramType, paramDesc, paramset.get(key)))
 
                     if paramset:
                         logging.debug("ParamsetDescription for {}".format(devAddress))

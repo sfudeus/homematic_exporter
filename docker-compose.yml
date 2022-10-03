@@ -1,0 +1,21 @@
+---
+version: "3"
+
+#networks:
+#  traefik:
+#    external: true
+
+services:
+  homematic-exporter:
+    build: .
+    #image: sfudeus/homematic_exporter
+    image: homematic_exporter
+    restart: unless-stopped
+#    networks:
+#      - traefik
+    ports:
+      - 8888:8010
+    command: --ccu_host "$CCU_HOST" --ccu_user "$CCU_USER" --ccu_pass "$CCU_PASS" --debug
+#    labels:
+#      - traefik.enable=true
+#      - traefik.port=8010
