@@ -224,7 +224,7 @@ class HomematicMetricsProcessor(threading.Thread):
                         elif paramType == 'ENUM':
                             logging.debug("Found {}: desc: {} key: {}".format(paramType, paramDesc, paramset.get(key)))
                             self.process_enum(devAddress, devType, devParentAddress, devParentType,
-                                              paramType, key, paramset.get(key), paramDesc.get('VALUE_LIST'))
+                                              key, paramset.get(key), paramDesc.get('VALUE_LIST'))
                         else:
                             # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
                             # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
@@ -287,12 +287,13 @@ class HomematicMetricsProcessor(threading.Thread):
             parent_device_type=parentDeviceType,
             mapped_name=self.resolve_mapped_name(deviceAddress, parentDeviceAddress)).set(value)
 
-    def process_enum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value, istates):
-        if not value:
+    def process_enum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, key, value, istates):
+        if value == '' or value is None:
+            logging.debug("Skipping processing enum {} with empty value".format(key))
             return
 
         gaugename = key.lower() + "_set"
-        logging.debug("Found {} param {} with value {}, gauge {}".format(paramType, key, value, gaugename))
+        logging.debug("Found enum param {} with value {}, gauge {}".format(key, value, gaugename))
 
         if not self.metrics.get(gaugename):
             self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=['ccu', 'device',
@@ -300,7 +301,7 @@ class HomematicMetricsProcessor(threading.Thread):
         gauge = self.metrics.get(gaugename)
         mapped_name_v = self.resolve_mapped_name(deviceAddress, parentDeviceAddress)
         state = istates[int(value)]
-        logging.debug("Setting {} to value {} item {}".format(mapped_name_v, str(value), state))
+        logging.debug("Setting {} to value {}/{}".format(mapped_name_v, str(value), state))
         gauge.labels(
             ccu=self.ccu_host,
             device=deviceAddress,
