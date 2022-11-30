@@ -34,6 +34,7 @@ class HomematicMetricsProcessor(threading.Thread):
         'HmIP-SWO-PL',
         'HmIP-SWO-PR',
         'HmIP-WTH-2',
+        'HmIP-BSL',
         'HM-CC-RT-DN',
         'HM-Dis-EP-WM55',
         'HM-Dis-WM55',
