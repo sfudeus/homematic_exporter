@@ -22,11 +22,16 @@ class HomematicMetricsProcessor(threading.Thread):
     # Supported Homematic (BidcosRF and IP) device types
     DEFAULT_SUPPORTED_TYPES = [
         'HmIP-eTRV-2',
+        'HmIP-eTRV-C',
+        'HmIP-eTRV-C-2',
         'HmIP-FSM',
+        'HmIP-MIOB',
+        'HMIP-PS',
         'HMIP-PSM',
         'HmIP-RCV-1',
         'HmIP-STH',
         'HmIP-STHD',
+        'HmIP-STHO',
         'HmIP-STE2-PCB',
         'HmIP-SWD',
         'HMIP-SWDO',
