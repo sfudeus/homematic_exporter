@@ -13,7 +13,7 @@ from socketserver import ThreadingMixIn
 from http.server import HTTPServer
 from pprint import pformat
 import requests
-from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary
+from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary, start_http_server
 
 
 class HomematicMetricsProcessor(threading.Thread):
@@ -338,14 +338,6 @@ class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
     """Thread per request HTTP server."""
 
 
-def start_http_server(port, addr='', registry=core.REGISTRY):
-    """Starts an HTTP server for prometheus metrics as a daemon thread"""
-    httpd = _ThreadingSimpleServer((addr, port), MetricsHandler.factory(registry))
-    thread = threading.Thread(target=httpd.serve_forever)
-    thread.daemon = False
-    thread.start()
-
-
 if __name__ == '__main__':
 
     PARSER = argparse.ArgumentParser()
@@ -392,3 +384,5 @@ if __name__ == '__main__':
         # Start up the server to expose the metrics.
         logging.info("Exposing metrics on port {}".format(ARGS.port))
         start_http_server(int(ARGS.port))
+        # Wait until the main loop terminates
+        PROCESSOR.join()
