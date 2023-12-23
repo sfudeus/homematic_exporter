@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm
+FROM python:3.12-slim-bookworm
 COPY requirements.txt /tmp
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
