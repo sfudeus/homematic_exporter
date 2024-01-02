@@ -5,14 +5,14 @@ services:
     build: ./
     container_name: homematic_exporter_hmip
     restart: unless-stopped
-    command: --ccu_host debmatic.fritz.box --ccu_port 2010 --port 9020 --interval 300
+    command: --ccu_host ${CCU_HOST} --ccu_port ${CCU_HMIP_PORT} --port ${EXPORTER_HMIP_PORT} --interval ${SCRAPPING_INTERVAL}
     ports:
-      - "9020:9020"
+      - ${EXPORTER_HMIP_PORT}:${EXPORTER_HMIP_PORT}
   homematic_exporter_hm:
     build: ./
     container_name: homematic_exporter_hm
     restart: unless-stopped
-    command: --ccu_host debmatic.fritz.box --ccu_port 2001 --port 9021 --interval 300
+    command: --ccu_host ${CCU_HOST} --ccu_port ${CCU_HM_PORT} --port ${EXPORTER_HM_PORT} --interval ${SCRAPPING_INTERVAL}
     ports:
-    - "9021:9021"
+    - ${EXPORTER_HM_PORT}:${EXPORTER_HM_PORT}
 
