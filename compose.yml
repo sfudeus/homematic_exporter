@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  homematic_exporter_hmip:
+    build: ./
+    container_name: homematic_exporter_hmip
+    restart: unless-stopped
+    command: --ccu_host debmatic.fritz.box --ccu_port 2010 --port 9020 --interval 300
+    ports:
+      - "9020:9020"
+  homematic_exporter_hm:
+    build: ./
+    container_name: homematic_exporter_hm
+    restart: unless-stopped
+    command: --ccu_host debmatic.fritz.box --ccu_port 2001 --port 9021 --interval 300
+    ports:
+    - "9021:9021"
+
