@@ -6,13 +6,15 @@ services:
     container_name: homematic_exporter_hmip
     restart: unless-stopped
     command: --ccu_host ${CCU_HOST} --ccu_port ${CCU_HMIP_PORT} --port ${EXPORTER_HMIP_PORT} --interval ${SCRAPPING_INTERVAL}
-    ports:
-      - ${EXPORTER_HMIP_PORT}:${EXPORTER_HMIP_PORT}
+
   homematic_exporter_hm:
     build: ./
     container_name: homematic_exporter_hm
     restart: unless-stopped
     command: --ccu_host ${CCU_HOST} --ccu_port ${CCU_HM_PORT} --port ${EXPORTER_HM_PORT} --interval ${SCRAPPING_INTERVAL}
-    ports:
-    - ${EXPORTER_HM_PORT}:${EXPORTER_HM_PORT}
+
+networks:
+  default:
+    name: monitoring_prometheus_grafana_default
+    external: true
 
