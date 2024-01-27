@@ -298,7 +298,13 @@ class HomematicMetricsProcessor(threading.Thread):
 				    string chId;
             foreach(chId, device.Channels()) {
 					    var ch=dom.GetObject(chId);
-					    WriteLine("C\t" # ch.Address() # "\t" # ch.Name() # "\t" # chId);
+					    var chNumber = ch.Name().Substr(ch.Name().Length() - 1);
+					    if (chNumber == "0"){
+					        var channelName = ch.Name();
+					    }else{
+					        var channelName = device.Name() # ":" # chNumber;
+					    }
+					    WriteLine("C\t" # ch.Address() # "\t" # channelName # "\t" # chId);
             }
 					}
 			  }
@@ -356,6 +362,7 @@ if __name__ == '__main__':
     PARSER.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
     PARSER.add_argument("--dump_device_names", help="Do not start exporter, just dump device names",
                         action="store_true")
+    PARSER.add_argument("--dump_sysvars", help="Do not start exporter, just dump system variables", action="store_true")
     ARGS = PARSER.parse_args()
 
     if ARGS.debug:
