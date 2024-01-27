@@ -226,7 +226,7 @@ class HomematicMetricsProcessor(threading.Thread):
         return re.match("^[0-9a-f]{14}:[0-9]+$", deviceAddress, re.IGNORECASE)
 
     def resolve_mapped_name(self, deviceAddress, parentDeviceAddress):
-        if deviceAddress in self.mapped_names and not self.is_default_device_address(deviceAddress):
+        if deviceAddress in self.mapped_names: # and not self.is_default_device_address(deviceAddress):
             return self.mapped_names[deviceAddress]
         elif parentDeviceAddress in self.mapped_names:
             return self.mapped_names[parentDeviceAddress]
