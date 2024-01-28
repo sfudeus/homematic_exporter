@@ -299,13 +299,14 @@ class HomematicMetricsProcessor(threading.Thread):
             foreach(chId, device.Channels()) {
 					    var ch=dom.GetObject(chId);
 					    var chNumber = ch.Name().Substr(ch.Name().Length() - 1);
-					    if (chNumber == "0"){
-					        var channelName = ch.Name();
+					    var chNamePrefix3 = ch.Name().Substr(0,3);
+                        var chNamePrefix5 = ch.Name().Substr(0,5);
+					    if ((chNamePrefix3 == "HM-") || (chNamePrefix3 == "Hm-") || (chNamePrefix5 == "HMIP-") || (chNamePrefix5 == "HmIP-")){
+					        WriteLine("C\t" # ch.Address() # "\t" # device.Name() # ":" # chNumber # "\t" # chId);
 					    }else{
-					        var channelName = device.Name() # ":" # chNumber;
-					    }
-					    WriteLine("C\t" # ch.Address() # "\t" # channelName # "\t" # chId);
-            }
+    					    WriteLine("C\t" # ch.Address() # "\t" # ch.Name() # "\t" # chId);
+                        }
+                    }
 					}
 			  }
 		  }
