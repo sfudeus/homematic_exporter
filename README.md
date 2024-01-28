@@ -112,6 +112,6 @@ Feel free to open issues for unsupported items.
 
 ## Build
 
-For multi-architecture builds (x86, arm, arm64), e.g. use `docker buildx build --platform linux/amd64,linux/arm/v7,linux/arm64 -t sfudeus/homematic_exporter:latest .` or use `build.sh`.
+For multi-architecture builds (x86, arm, arm64), e.g. use `docker buildx build --platform linux/amd64,linux/arm/v7,linux/arm64 -t s0riak/homematic_exporter:latest .` or use `build.sh`.
 
 You can usually find an up-to-date image for amd64, arm and arm64 at sfudeus/homematic_exporter:latest in [docker hub](https://hub.docker.com/r/sfudeus/homematic_exporter). Additionally, they are tagged with their build date to have a stable reference.

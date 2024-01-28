@@ -17,65 +17,9 @@ from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summar
 
 
 class HomematicMetricsProcessor(threading.Thread):
-
     METRICS_NAMESPACE = 'homematic'
-    # Supported Homematic (BidcosRF and IP) device types
-    DEFAULT_SUPPORTED_TYPES = [
-        'HmIP-eTRV-2',
-        'HmIP-eTRV-C',
-        'HmIP-eTRV-C-2',
-        'HmIP-FSM',
-        'HmIP-MIOB',
-        'HMIP-PS',
-        'HMIP-PSM',
-        'HmIP-RCV-1',
-        'HmIP-STH',
-        'HmIP-STHD',
-        'HmIP-STHO',
-        'HmIP-STE2-PCB',
-        'HmIP-SWD',
-        'HMIP-SWDO',
-        'HmIP-SWSD',
-        'HmIP-SWO-PL',
-        'HmIP-SWO-PR',
-        'HmIP-WTH-2',
-        'HmIP-BSL',
-        'HM-CC-RT-DN',
-        'HM-Dis-EP-WM55',
-        'HM-Dis-WM55',
-        'HM-ES-PMSw1-Pl-DN-R5',
-        'HM-ES-TX-WM',
-        'HM-LC-Bl1-FM',
-        'HM-LC-Dim1PWM-CV',
-        'HM-LC-Dim1T-FM',
-        'HM-LC-RGBW-WM',
-        'HM-LC-Sw1-Pl-DN-R5',
-        'HM-LC-Sw1-FM',
-        'HM-LC-Sw2-FM',
-        'HM-OU-CFM-Pl',
-        'HM-OU-CFM-TW',
-        'HM-PBI-4-FM',
-        'HM-PB-2-WM55',
-        'HM-PB-6-WM55',
-        'HM-RC-P1',
-        'HM-RC-4-2',
-        'HM-RC-8',
-        'HM-Sec-MDIR-2',
-        'HM-Sec-SCo',
-        'HM-Sec-SC-2',
-        'HM-Sec-SD-2',
-        'HM-Sec-TiS',
-        'HM-Sen-LI-O',
-        'HM-Sen-MDIR-O',
-        'HM-Sen-MDIR-WM55',
-        'HM-SwI-3-FM',
-        'HM-TC-IT-WM-W-EU',
-        'HM-WDS10-TH-O',
-        'HM-WDS100-C6-O-2',
-        'HM-WDS30-OT2-SM',
-        'HM-WDS40-TH-I',
-        'HM-WDS40-TH-I-2',
-    ]
+    # Unsupported Homematic (BidcosRF and IP) device types
+    UNDEFAULT_SUPPORTED_TYPES = []
 
     # A list with channel numbers for devices where getParamset
     # never works, or only sometimes works (e.g. if the device sent
@@ -106,7 +50,7 @@ class HomematicMetricsProcessor(threading.Thread):
     reload_names_active = False
     reload_names_interval = 30  # reload names every 60 gatherings
     mapped_names = {}
-    supported_device_types = DEFAULT_SUPPORTED_TYPES
+    unsupported_device_types = UNDEFAULT_SUPPORTED_TYPES
     channels_with_errors_allowed = DEFAULT_CHANNELS_WITH_ERRORS_ALLOWED
 
     device_count = None
@@ -115,13 +59,18 @@ class HomematicMetricsProcessor(threading.Thread):
     def run(self):
         logging.info("Starting thread for data gathering")
         logging.info("Mapping {} devices with custom names".format(len(self.mapped_names)))
-        logging.info("Supporting {} device types: {}".format(len(self.supported_device_types), ",".join(self.supported_device_types)))
+        logging.info("The following {} device types are NOT supported: {}".format(len(self.unsupported_device_types),
+                                                                                  ",".join(
+                                                                                      self.unsupported_device_types)))
 
-        gathering_counter = Counter('gathering_count', 'Amount of gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
-        error_counter = Counter('gathering_errors', 'Amount of failed gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+        gathering_counter = Counter('gathering_count', 'Amount of gathering runs', labelnames=['ccu'],
+                                    namespace=self.METRICS_NAMESPACE)
+        error_counter = Counter('gathering_errors', 'Amount of failed gathering runs', labelnames=['ccu'],
+                                namespace=self.METRICS_NAMESPACE)
         generate_metrics_summary = Summary('generate_metrics_seconds', 'Time spent in gathering runs',
                                            labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
-        read_names_summary = Summary('read_names_seconds', 'Time spent reading names from CCU', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+        read_names_summary = Summary('read_names_seconds', 'Time spent reading names from CCU', labelnames=['ccu'],
+                                     namespace=self.METRICS_NAMESPACE)
 
         gathering_loop_counter = 1
 
@@ -170,8 +119,9 @@ class HomematicMetricsProcessor(threading.Thread):
                 logging.info("Processing config file {}".format(config_filename))
                 config = json.load(config_file)
                 self.mapped_names = config.get('device_mapping', {})
-                self.supported_device_types = config.get('supported_device_types', self.DEFAULT_SUPPORTED_TYPES)
-                self.channels_with_errors_allowed = config.get('channels_with_errors_allowed', self.DEFAULT_CHANNELS_WITH_ERRORS_ALLOWED)
+                self.unsupported_device_types = config.get('unsupported_device_types', self.UNDEFAULT_SUPPORTED_TYPES)
+                self.channels_with_errors_allowed = config.get('channels_with_errors_allowed',
+                                                               self.DEFAULT_CHANNELS_WITH_ERRORS_ALLOWED)
 
         self.ccu_host = ccu_host
         self.ccu_port = ccu_port
@@ -182,7 +132,8 @@ class HomematicMetricsProcessor(threading.Thread):
             self.ccu_url = "http://{}:{}".format(ccu_host, ccu_port)
         self.gathering_interval = int(gathering_interval)
         self.reload_names_interval = int(reload_names_interval)
-        self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+        self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'],
+                                 namespace=self.METRICS_NAMESPACE)
 
     def generate_metrics(self):
         logging.info("Gathering metrics")
@@ -193,14 +144,16 @@ class HomematicMetricsProcessor(threading.Thread):
             devParentAddress = device.get('PARENT')
             devAddress = device.get('ADDRESS')
             if devParentAddress == '':
-                if devType in self.supported_device_types:
+                if not devType in self.unsupported_device_types:
                     devChildcount = len(device.get('CHILDREN'))
-                    logging.info("Found top-level device {} of type {} with {} children".format(devAddress, devType, devChildcount))
+                    logging.info("Found top-level device {} of type {} with {} children".format(devAddress, devType,
+                                                                                                devChildcount))
                     logging.debug(pformat(device))
                 else:
                     logging.info("Found unsupported top-level device {} of type {}".format(devAddress, devType))
-            if devParentType in self.supported_device_types:
-                logging.debug("Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
+            if not devParentType in self.unsupported_device_types:
+                logging.debug(
+                    "Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
                 logging.debug(pformat(device))
 
                 allowFailedChannel = False
@@ -216,18 +169,21 @@ class HomematicMetricsProcessor(threading.Thread):
                         paramset = self.fetch_param_set(devAddress)
                     except xmlrpc.client.Fault:
                         if allowFailedChannel:
-                            logging.debug("Error reading paramset for device {} of type {} in parent type {} (expected)".format(
-                                devAddress, devType, devParentType))
+                            logging.debug(
+                                "Error reading paramset for device {} of type {} in parent type {} (expected)".format(
+                                    devAddress, devType, devParentType))
                         else:
-                            logging.debug("Error reading paramset for device {} of type {} in parent type {} (unexpected)".format(
-                                devAddress, devType, devParentType))
+                            logging.debug(
+                                "Error reading paramset for device {} of type {} in parent type {} (unexpected)".format(
+                                    devAddress, devType, devParentType))
                             raise
 
                     for key in paramsetDescription:
                         paramDesc = paramsetDescription.get(key)
                         paramType = paramDesc.get('TYPE')
                         if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
-                            self.process_single_value(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
+                            self.process_single_value(devAddress, devType, devParentAddress, devParentType, paramType,
+                                                      key, paramset.get(key))
                         elif paramType == 'ENUM':
                             logging.debug("Found {}: desc: {} key: {}".format(paramType, paramDesc, paramset.get(key)))
                             self.process_enum(devAddress, devType, devParentAddress, devParentType,
@@ -235,7 +191,8 @@ class HomematicMetricsProcessor(threading.Thread):
                         else:
                             # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
                             # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
-                            logging.debug("Unknown paramType {}, desc: {}, key: {}".format(paramType, paramDesc, paramset.get(key)))
+                            logging.debug("Unknown paramType {}, desc: {}, key: {}".format(paramType, paramDesc,
+                                                                                           paramset.get(key)))
 
                     if paramset:
                         logging.debug("ParamsetDescription for {}".format(devAddress))
@@ -269,14 +226,15 @@ class HomematicMetricsProcessor(threading.Thread):
         return re.match("^[0-9a-f]{14}:[0-9]+$", deviceAddress, re.IGNORECASE)
 
     def resolve_mapped_name(self, deviceAddress, parentDeviceAddress):
-        if deviceAddress in self.mapped_names and not self.is_default_device_address(deviceAddress):
+        if deviceAddress in self.mapped_names: # and not self.is_default_device_address(deviceAddress):
             return self.mapped_names[deviceAddress]
         elif parentDeviceAddress in self.mapped_names:
             return self.mapped_names[parentDeviceAddress]
         else:
             return deviceAddress
 
-    def process_single_value(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
+    def process_single_value(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key,
+                             value):
         logging.debug("Found {} param {} with value {}".format(paramType, key, value))
 
         if value == '' or value is None:
@@ -285,7 +243,9 @@ class HomematicMetricsProcessor(threading.Thread):
         gaugename = key.lower()
         if not self.metrics.get(gaugename):
             self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type',
-                                            'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
+                                                                                         'parent_device_type',
+                                                                                         'mapped_name'],
+                                            namespace=self.METRICS_NAMESPACE)
         gauge = self.metrics.get(gaugename)
         gauge.labels(
             ccu=self.ccu_host,
@@ -304,7 +264,10 @@ class HomematicMetricsProcessor(threading.Thread):
 
         if not self.metrics.get(gaugename):
             self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=['ccu', 'device',
-                                           'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
+                                                                                                        'device_type',
+                                                                                                        'parent_device_type',
+                                                                                                        'mapped_name'],
+                                           namespace=self.METRICS_NAMESPACE)
         gauge = self.metrics.get(gaugename)
         mapped_name_v = self.resolve_mapped_name(deviceAddress, parentDeviceAddress)
         state = istates[int(value)]
@@ -335,8 +298,15 @@ class HomematicMetricsProcessor(threading.Thread):
 				    string chId;
             foreach(chId, device.Channels()) {
 					    var ch=dom.GetObject(chId);
-					    WriteLine("C\t" # ch.Address() # "\t" # ch.Name() # "\t" # chId);
-            }
+					    var chNumber = ch.Name().Substr(ch.Name().Length() - 1);
+					    var chNamePrefix3 = ch.Name().Substr(0,3);
+                        var chNamePrefix5 = ch.Name().Substr(0,5);
+					    if ((chNamePrefix3 == "HM-") || (chNamePrefix3 == "Hm-") || (chNamePrefix5 == "HMIP-") || (chNamePrefix5 == "HmIP-")){
+					        WriteLine("C\t" # ch.Address() # "\t" # device.Name() # ":" # chNumber # "\t" # chId);
+					    }else{
+    					    WriteLine("C\t" # ch.Address() # "\t" # ch.Name() # "\t" # chId);
+                        }
+                    }
 					}
 			  }
 		  }
@@ -372,7 +342,8 @@ if __name__ == '__main__':
 
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument("--ccu_host", help="The hostname of the ccu instance", required=True)
-    PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)", default=2010)
+    PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)",
+                        default=2010)
     PARSER.add_argument("--ccu_user", help="The username for the CCU (if authentication is enabled)")
     PARSER.add_argument("--ccu_pass", help="The password for the CCU (if authentication is enabled)")
     PARSER.add_argument("--interval", help="The interval between two gathering runs in seconds", default=60)
@@ -382,7 +353,9 @@ if __name__ == '__main__':
     PARSER.add_argument("--debug", action="store_true")
     PARSER.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
     PARSER.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
-    PARSER.add_argument("--dump_device_names", help="Do not start exporter, just dump device names", action="store_true")
+    PARSER.add_argument("--dump_device_names", help="Do not start exporter, just dump device names",
+                        action="store_true")
+    PARSER.add_argument("--dump_sysvars", help="Do not start exporter, just dump system variables", action="store_true")
     ARGS = PARSER.parse_args()
 
     if ARGS.debug:
@@ -394,7 +367,8 @@ if __name__ == '__main__':
     if ARGS.ccu_user and ARGS.ccu_pass:
         auth = (ARGS.ccu_user, ARGS.ccu_pass)
 
-    PROCESSOR = HomematicMetricsProcessor(ARGS.ccu_host, ARGS.ccu_port, auth, ARGS.interval, ARGS.namereload, ARGS.config_file)
+    PROCESSOR = HomematicMetricsProcessor(ARGS.ccu_host, ARGS.ccu_port, auth, ARGS.interval, ARGS.namereload,
+                                          ARGS.config_file)
 
     if ARGS.dump_devices:
         print(pformat(PROCESSOR.fetch_devices_list()))
