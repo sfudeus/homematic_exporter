@@ -152,6 +152,7 @@ class HomematicMetricsProcessor(threading.Thread):
             try:
                 with generate_metrics_summary.labels(self.ccu_host).time():
                     self.generate_metrics()
+                    self.refresh_time = time.time()
             except OSError as os_error:
                 logging.info("Failed to generate metrics: {0}".format(os_error))
                 error_counter.labels(self.ccu_host).inc()
@@ -183,6 +184,11 @@ class HomematicMetricsProcessor(threading.Thread):
         self.gathering_interval = int(gathering_interval)
         self.reload_names_interval = int(reload_names_interval)
         self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+        # Upon request export the seconds since the last successful update.
+        # This is robust against internal crashes and can be used by the healthcheck.
+        self.refresh_time = time.time()
+        self.refresh_age = Gauge("refresh_age_seconds", "Seconds since the last successful refresh.", labelnames=["ccu"], namespace=self.METRICS_NAMESPACE)
+        self.refresh_age.labels(self.ccu_host).set_function(lambda: time.time() - self.refresh_time)
 
     def generate_metrics(self):
         logging.info("Gathering metrics")
