@@ -1,0 +1,14 @@
+name: Docker Build/Publish Preview Image from PR
+on:
+  pull_request:
+    branches:
+    - master
+    - main
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    uses: sfudeus/workflows/.github/workflows/docker-build-publish-pr.yaml@main
+    secrets: inherit
+    with:
+      tag: preview-${{ github.event.number }}

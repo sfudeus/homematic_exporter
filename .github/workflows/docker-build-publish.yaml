@@ -1,40 +1,14 @@
-name: Docker Build/Publish Release
+name: Docker Build/Publish Image
 on:
   push:
-    tags:
-    - "*"
+    branches:
+      - master
+      - main
   schedule:
   - cron:  '15 6 * * 0'
   workflow_dispatch: {}
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    env:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Define revision
-      id: revision
-      run: |
-        REVISION=$(date +%F)
-        echo "target-revision=$REVISION" >> $GITHUB_OUTPUT
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v2
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    - name: Docker login
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-    - name: Docker build/push
-      uses: docker/build-push-action@v5
-      with:
-        platforms: linux/amd64,linux/arm/v7,linux/arm64
-        tags: |
-          "${{ github.repository }}:${{ steps.revision.outputs.target-revision }}"
-          "${{ github.repository }}:latest"
-        push: true
+    uses: sfudeus/workflows/.github/workflows/docker-build-publish-branch.yaml@main
+    secrets: inherit
