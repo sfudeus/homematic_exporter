@@ -11,14 +11,22 @@
     "00112233445566": {
       "id": 314,
       "name": "Terrace Light",
-      "mainRoomName": "Garden",
-      "mainFunctionName": "Light"
+      "mainRoom": {
+        "name": "Garden"
+      },
+      "mainFunction": {
+        "name": "Light"
+      }
     },
     "00778899aaccdd": {
       "id": 271,
       "name": "Motion Sensor",
-      "mainRoomName": "Entrance",
-      "mainFunctionName": "Security"
+      "mainRoom": {
+        "name": "Entrance"
+      },
+      "mainFunction": {
+        "name": "Security"
+      }
     }
   }
 }
