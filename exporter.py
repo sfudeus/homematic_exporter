@@ -103,9 +103,9 @@ class HomematicMetricsProcessor(threading.Thread):
     ccu_url = ''
     auth = None
     gathering_interval = 60
-    reload_names_active = False
-    reload_names_interval = 30  # reload names every 60 gatherings
-    mapped_names = {}
+    reload_device_mappings_active = False
+    reload_device_mappings_interval = 30  # reload devices every 30 gatherings
+    device_mappings = {}
     supported_device_types = DEFAULT_SUPPORTED_TYPES
     channels_with_errors_allowed = DEFAULT_CHANNELS_WITH_ERRORS_ALLOWED
 
@@ -114,39 +114,39 @@ class HomematicMetricsProcessor(threading.Thread):
 
     def run(self):
         logging.info("Starting thread for data gathering")
-        logging.info("Mapping {} devices with custom names".format(len(self.mapped_names)))
+        logging.info("Mapping {} devices with custom mapping".format(len(self.device_mappings)))
         logging.info("Supporting {} device types: {}".format(len(self.supported_device_types), ",".join(self.supported_device_types)))
 
         gathering_counter = Counter('gathering_count', 'Amount of gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
         error_counter = Counter('gathering_errors', 'Amount of failed gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
         generate_metrics_summary = Summary('generate_metrics_seconds', 'Time spent in gathering runs',
                                            labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
-        read_names_summary = Summary('read_names_seconds', 'Time spent reading names from CCU', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+        read_device_mappings_summary = Summary('read_device_mappings_seconds', 'Time spent reading device mappings from CCU', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
         gathering_loop_counter = 1
 
-        if len(self.mapped_names) == 0:
-            # if no custom mapped names are given we use them from the ccu.
-            self.reload_names_active = True
+        if len(self.device_mappings) == 0:
+            # if no custom device mappings are given we use them from the ccu.
+            self.reload_device_mappings_active = True
 
-            with read_names_summary.labels(self.ccu_host).time():
-                self.mapped_names = self.read_mapped_names()
-            logging.info("Read {} device names from CCU".format(len(self.mapped_names)))
+            with read_device_mappings_summary.labels(self.ccu_host).time():
+                self.device_mappings = self.read_device_mapping()
+            logging.info("Read {} device mappings from CCU".format(len(self.device_mappings)))
 
         while True:
-            if self.reload_names_active:
-                if gathering_loop_counter % self.reload_names_interval == 0:
+            if self.reload_device_mappings_active:
+                if gathering_loop_counter % self.reload_device_mappings_interval == 0:
                     try:
-                        with read_names_summary.labels(self.ccu_host).time():
-                            self.mapped_names = self.read_mapped_names()
+                        with read_device_mappings_summary.labels(self.ccu_host).time():
+                            self.device_mappings = self.read_device_mapping()
                     except OSError as os_error:
-                        logging.info("Failed to read device names: {0}".format(os_error))
+                        logging.info("Failed to read device mappings: {0}".format(os_error))
                         error_counter.labels(self.ccu_host).inc()
                     except BaseException:
-                        logging.info("Failed to read device names: {0}".format(sys.exc_info()))
+                        logging.info("Failed to read device mappings: {0}".format(sys.exc_info()))
                         error_counter.labels(self.ccu_host).inc()
 
-                    logging.info("Read {} device names from CCU".format(len(self.mapped_names)))
+                    logging.info("Read {} device mappings from CCU".format(len(self.device_mappings)))
 
             gathering_counter.labels(self.ccu_host).inc()
             try:
@@ -154,23 +154,23 @@ class HomematicMetricsProcessor(threading.Thread):
                     self.generate_metrics()
                     self.refresh_time = time.time()
             except OSError as os_error:
-                logging.info("Failed to generate metrics: {0}".format(os_error))
+                logging.exception("Failed to generate metrics: {0}".format(os_error))
                 error_counter.labels(self.ccu_host).inc()
             except BaseException:
-                logging.info("Failed to generate metrics: {0}".format(sys.exc_info()))
+                logging.exception("Failed to generate metrics: {0}".format(sys.exc_info()))
                 error_counter.labels(self.ccu_host).inc()
             finally:
                 time.sleep(self.gathering_interval)
             gathering_loop_counter += 1
 
-    def __init__(self, ccu_host, ccu_port, auth, gathering_interval, reload_names_interval, config_filename):
+    def __init__(self, ccu_host, ccu_port, auth, gathering_interval, reload_device_mappings_interval, config_filename):
         super().__init__()
 
         if config_filename:
             with open(config_filename) as config_file:
                 logging.info("Processing config file {}".format(config_filename))
                 config = json.load(config_file)
-                self.mapped_names = config.get('device_mapping', {})
+                self.device_mappings = config.get('device_mapping', {})
                 self.supported_device_types = config.get('supported_device_types', self.DEFAULT_SUPPORTED_TYPES)
                 self.channels_with_errors_allowed = config.get('channels_with_errors_allowed', self.DEFAULT_CHANNELS_WITH_ERRORS_ALLOWED)
 
@@ -182,7 +182,7 @@ class HomematicMetricsProcessor(threading.Thread):
         else:
             self.ccu_url = "http://{}:{}".format(ccu_host, ccu_port)
         self.gathering_interval = int(gathering_interval)
-        self.reload_names_interval = int(reload_names_interval)
+        self.reload_device_mappings_interval = int(reload_device_mappings_interval)
         self.devicecount = Gauge('devicecount', 'Number of processed/supported devices', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
         # Upon request export the seconds since the last successful update.
         # This is robust against internal crashes and can be used by the healthcheck.
@@ -274,13 +274,13 @@ class HomematicMetricsProcessor(threading.Thread):
     def is_default_device_address(self, deviceAddress):
         return re.match("^[0-9a-f]{14}:[0-9]+$", deviceAddress, re.IGNORECASE)
 
-    def resolve_mapped_name(self, deviceAddress, parentDeviceAddress):
-        if deviceAddress in self.mapped_names and not self.is_default_device_address(deviceAddress):
-            return self.mapped_names[deviceAddress]
-        elif parentDeviceAddress in self.mapped_names:
-            return self.mapped_names[parentDeviceAddress]
+    def resolve_device_mapping(self, deviceAddress, parentDeviceAddress):
+        if deviceAddress in self.device_mappings and not self.is_default_device_address(deviceAddress):
+            return self.device_mappings[deviceAddress]
+        elif parentDeviceAddress in self.device_mappings:
+            return self.device_mappings[parentDeviceAddress]
         else:
-            return deviceAddress
+            return {"name": deviceAddress}
 
     def process_single_value(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
         logging.debug("Found {} param {} with value {}".format(paramType, key, value))
@@ -290,15 +290,28 @@ class HomematicMetricsProcessor(threading.Thread):
 
         gaugename = key.lower()
         if not self.metrics.get(gaugename):
-            self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=['ccu', 'device', 'device_type',
-                                            'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
+            self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=[
+                'ccu',
+                'device_address',
+                'device_type',
+                'parent_device_type',
+                'device_id',
+                'device_name',
+                'room_name',
+                'function_name'
+            ], namespace=self.METRICS_NAMESPACE)
         gauge = self.metrics.get(gaugename)
+        deviceMapping = self.resolve_device_mapping(deviceAddress, parentDeviceAddress)
         gauge.labels(
             ccu=self.ccu_host,
-            device=deviceAddress,
+            device_address=deviceAddress,
             device_type=deviceType,
             parent_device_type=parentDeviceType,
-            mapped_name=self.resolve_mapped_name(deviceAddress, parentDeviceAddress)).set(value)
+            device_id=deviceMapping.get("id"),
+            device_name=deviceMapping.get("name"),
+            room_name=deviceMapping.get("mainRoom", {}).get("name"),
+            function_name=deviceMapping.get("mainFunction", {}).get("name")
+        ).set(value)
 
     def process_enum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, key, value, istates):
         if value == '' or value is None:
@@ -309,52 +322,75 @@ class HomematicMetricsProcessor(threading.Thread):
         logging.debug("Found enum param {} with value {}, gauge {}".format(key, value, gaugename))
 
         if not self.metrics.get(gaugename):
-            self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=['ccu', 'device',
-                                           'device_type', 'parent_device_type', 'mapped_name'], namespace=self.METRICS_NAMESPACE)
+            self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=[
+                'ccu',
+                'device_address',
+                'device_type',
+                'parent_device_type',
+                'device_id',
+                'device_name',
+                'room_name',
+                'function_name'
+            ], namespace=self.METRICS_NAMESPACE)
         gauge = self.metrics.get(gaugename)
-        mapped_name_v = self.resolve_mapped_name(deviceAddress, parentDeviceAddress)
+        deviceMapping = self.resolve_device_mapping(deviceAddress, parentDeviceAddress)
         state = istates[int(value)]
-        logging.debug("Setting {} to value {}/{}".format(mapped_name_v, str(value), state))
+        logging.debug("Setting {} to value {}/{}".format(deviceMapping.get("name"), str(value), state))
         gauge.labels(
             ccu=self.ccu_host,
-            device=deviceAddress,
+            device_address=deviceAddress,
             device_type=deviceType,
             parent_device_type=parentDeviceType,
-            mapped_name=mapped_name_v
+            device_id=deviceMapping.get("id"),
+            device_name=deviceMapping.get("name"),
+            room_name=deviceMapping.get("mainRoom", {}).get("name"),
+            function_name=deviceMapping.get("mainFunction", {}).get("name")
         ).state(state)
 
-    def read_mapped_names(self):
-        """Reads mapped names via CCU TCL script, returns a dict of device address to device name"""
+    def read_device_mapping(self):
+        """Reads device mappings via CCU TCL script, returns a dict of device address to device id, name, rooms and functions"""
         url = "http://{}:8181/tclrega.exe".format(self.ccu_host)
 
-        # this script returns the UI names of all devices (D), channels (C).
-        # one entry per line, tab separated the type, address, UI name and ID.
+        # this script returns the UI names of all devices (D), channels (C), rooms (R) and functions (F).
+        # one entry per line, tab separated the object type, device address, channel address, UI object name and object ID.
         # inspired by https://github.com/mdzio/ccu-historian/blob/master/hc-utils/src/mdz/hc/itf/hm/HmScriptClient.groovy
-        script_get_names = """
+        script_get_device_mappings = """
       string id;
       foreach(id, root.Devices().EnumIDs()) {
-			  var device=dom.GetObject(id);
-			  if (device.ReadyConfig()==true && device.Name()!='Gateway') {
-  			  WriteLine("D\t" # device.Address() # "\t" # device.Name() # "\t" # id);
-
-			    if (device.Type()==OT_DEVICE) {
-				    string chId;
+        var device=dom.GetObject(id);
+        if (device.ReadyConfig()==true && device.Name()!='Gateway') {
+          WriteLine("D\t" # device.Address() # "\t\t" # device.Name() # "\t" # id);
+          if (device.Type()==OT_DEVICE) {
+            string chId;
             foreach(chId, device.Channels()) {
-					    var ch=dom.GetObject(chId);
-					    WriteLine("C\t" # ch.Address() # "\t" # ch.Name() # "\t" # chId);
+              var ch=dom.GetObject(chId);
+              WriteLine("C\t" # device.Address() # "\t" # ch.Address() # "\t" # ch.Name() # "\t" # chId);
+              string rmId;
+              foreach(rmId, ch.ChnRoom()) {
+                var rm = dom.GetObject(rmId);
+                WriteLine("R\t" # device.Address() # "\t" # ch.Address() # "\t" # rm.Name() # "\t" # rmId);
+              }
+              string fnId;
+              foreach(fnId, ch.ChnFunction()) {
+                var fn = dom.GetObject(fnId);
+                WriteLine("F\t" # device.Address() # "\t" # ch.Address() # "\t" # fn.Name() # "\t" # fnId);
+              }
             }
-					}
-			  }
-		  }
+          }
+        }
+      }
       """
 
-        response = requests.post(url, auth=self.auth, data=script_get_names)
+        response = requests.post(url, auth=self.auth, data=script_get_device_mappings)
         logging.debug(response.text)
         if response.status_code != 200:
-            logging.warning("Failed to read name mappings, status code was %d", response.status_code)
+            logging.warning("Failed to read device mappings, status code was %d", response.status_code)
             return {}
 
-        ccu_mapped_names = {}
+        devices = []
+        channels = []
+        rooms = []
+        functions = []
 
         # parse the returned lines
         lines = response.text.splitlines()
@@ -364,11 +400,88 @@ class HomematicMetricsProcessor(threading.Thread):
             if line.startswith("<xml><exec>"):
                 continue
 
-            (type, address, name, *id) = line.split("\t")
-            ccu_mapped_names[address] = name
+            (objType, deviceAddress, channelAddress, objName, objId) = line.split("\t")
 
-        return ccu_mapped_names
+            if objType == "D":
+                devices += [{
+                    "id": objId,
+                    "name": objName,
+                    "address": deviceAddress
+                }]
+            elif objType == "C":
+                channels += [{
+                    "id": objId,
+                    "name": objName,
+                    "address": channelAddress,
+                    "deviceAddress": deviceAddress
+                }]
+            elif objType == "R":
+                rooms += [{
+                    "id": objId,
+                    "name": objName,
+                    "channelAddress": channelAddress,
+                    "deviceAddress": deviceAddress
+                }]
+            elif objType == "F":
+                functions += [{
+                    "id": objId,
+                    "name": objName,
+                    "channelAddress": channelAddress,
+                    "deviceAddress": deviceAddress
+                }]
 
+        ccu_device_mappings = {
+            device["address"] : {k: v for k, v in device.items() if k != "address"} | {
+                "channels": {
+                    channel["address"]: {k: v for k, v in channel.items() if k not in ("address", "deviceAddress")} | {
+                        "rooms": {
+                            room["id"]: {k: v for k, v in room.items() if k not in ("id", "channelAddress", "deviceAddress")}
+                            for room in rooms if room["deviceAddress"] == device["address"]
+                            and room["channelAddress"] == channel["address"]
+                        },
+                        "functions": {
+                            function["id"]: {k: v for k, v in function.items() if k not in ("id", "channelAddress", "deviceAddress")}
+                            for function in functions if function["deviceAddress"] == device["address"]
+                            and function["channelAddress"] == channel["address"]
+                        }
+                    } for channel in channels if channel["deviceAddress"] == device["address"]
+                },
+            } for device in devices
+        }
+
+        ccu_device_mappings = {
+            deviceAddress : deviceAttrs | {
+                "rooms": {
+                    roomId: roomAttrs for channelAttrs in deviceAttrs["channels"].values()
+                    for roomId, roomAttrs in channelAttrs["rooms"].items()
+                },
+                "functions": {
+                    functionId: functionAttrs for channelAttrs in deviceAttrs["channels"].values()
+                    for functionId, functionAttrs in channelAttrs["functions"].items()
+                },
+                "roomIds": [ # list is only an intermediate step
+                    roomId for channelAttrs in deviceAttrs["channels"].values()
+                    for roomId in channelAttrs["rooms"].keys()
+                ],
+                "functionIds": [ # list is only an intermediate step
+                    functionId for channelAttrs in deviceAttrs["channels"].values()
+                    for functionId in channelAttrs["functions"].keys()
+                ],
+            } for deviceAddress, deviceAttrs in ccu_device_mappings.items()
+        }
+
+        ccu_device_mappings = {
+            deviceAddress : {k: v for k, v in deviceAttrs.items() if k not in ("roomIds", "functionIds")} | {
+                "mainRoom": deviceAttrs["rooms"][max(
+                    set(deviceAttrs["roomIds"]), key = deviceAttrs["roomIds"].count
+                )] if len(deviceAttrs["roomIds"]) > 0 else {},
+                "mainFunction": deviceAttrs["functions"][max(
+                    set(deviceAttrs["functionIds"]), key = list(deviceAttrs["functionIds"]).count
+                )] if len(deviceAttrs["functionIds"]) > 0 else {}
+            } for deviceAddress, deviceAttrs in ccu_device_mappings.items()
+        }
+
+        return ccu_device_mappings
 
 class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
     """Thread per request HTTP server."""
@@ -382,13 +495,13 @@ if __name__ == '__main__':
     PARSER.add_argument("--ccu_user", help="The username for the CCU (if authentication is enabled)")
     PARSER.add_argument("--ccu_pass", help="The password for the CCU (if authentication is enabled)")
     PARSER.add_argument("--interval", help="The interval between two gathering runs in seconds", default=60)
-    PARSER.add_argument("--namereload", help="After how many intervals the device names are reloaded", default=30)
+    PARSER.add_argument("--mappingreload", help="After how many intervals the device mappings are reloaded", default=30)
     PARSER.add_argument("--port", help="The port where to expose the exporter", default=8010)
-    PARSER.add_argument("--config_file", help="A config file with e.g. supported types and device name mappings")
+    PARSER.add_argument("--config_file", help="A config file with e.g. supported types and device mappings")
     PARSER.add_argument("--debug", action="store_true")
     PARSER.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
     PARSER.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
-    PARSER.add_argument("--dump_device_names", help="Do not start exporter, just dump device names", action="store_true")
+    PARSER.add_argument("--dump_device_mappings", help="Do not start exporter, just dump device mappings", action="store_true")
     ARGS = PARSER.parse_args()
 
     if ARGS.debug:
@@ -400,7 +513,7 @@ if __name__ == '__main__':
     if ARGS.ccu_user and ARGS.ccu_pass:
         auth = (ARGS.ccu_user, ARGS.ccu_pass)
 
-    PROCESSOR = HomematicMetricsProcessor(ARGS.ccu_host, ARGS.ccu_port, auth, ARGS.interval, ARGS.namereload, ARGS.config_file)
+    PROCESSOR = HomematicMetricsProcessor(ARGS.ccu_host, ARGS.ccu_port, auth, ARGS.interval, ARGS.mappingreload, ARGS.config_file)
 
     if ARGS.dump_devices:
         print(pformat(PROCESSOR.fetch_devices_list()))
@@ -409,8 +522,8 @@ if __name__ == '__main__':
         #    print(pformat(PROCESSOR.fetch_param_set_description(ARGS.dump_parameters)))
         print("getParamset:")
         print(pformat(PROCESSOR.fetch_param_set(ARGS.dump_parameters)))
-    elif ARGS.dump_device_names:
-        print(pformat(PROCESSOR.read_mapped_names()))
+    elif ARGS.dump_device_mappings:
+        print(pformat(PROCESSOR.read_device_mapping()))
     else:
         PROCESSOR.start()
         # Start up the server to expose the metrics.
