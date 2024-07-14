@@ -13,7 +13,7 @@ from socketserver import ThreadingMixIn
 from http.server import HTTPServer
 from pprint import pformat
 import requests
-from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary, start_http_server
+from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary, start_http_server, REGISTRY
 
 class HomematicMetricsProcessor(threading.Thread):
 
@@ -121,6 +121,7 @@ class HomematicMetricsProcessor(threading.Thread):
         generate_metrics_summary = Summary('generate_metrics_seconds', 'Time spent in gathering runs',
                                            labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
         read_device_mappings_summary = Summary('read_device_mappings_seconds', 'Time spent reading device mappings from CCU', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+        reset_registry_summary = Summary('reset_registry_seconds', 'Time spent resetting the collector registry in python', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
         gathering_loop_counter = 1
 
@@ -146,6 +147,26 @@ class HomematicMetricsProcessor(threading.Thread):
                         error_counter.labels(self.ccu_host).inc()
 
                     logging.info("Read {} device mappings from CCU".format(len(self.device_mappings)))
+
+                    try:
+                        # reset registry regarding device metrics, leaving global metrics, and default python metrics untouched
+                        # reset is necessary to remove old metrics for devices/channels that are no longer existent
+                        # TODO: This creates a problem because in the time between reset and recreation there are no metrics
+                        # if the pull from prometheus arrives during this time, it will not gather anything
+                        # unfortunately, I found no other way to do this, otherwise the exporter would have to be restarted
+                        # every time a device/channel is removed, renamed or "moved" to another room/function
+                        with reset_registry_summary.labels(self.ccu_host).time():
+                            collector_to_names = REGISTRY._collector_to_names.copy()
+                            for collector, names in collector_to_names.items():
+                                metric_basename = names[0].removeprefix(self.METRICS_NAMESPACE + "_")
+                                if metric_basename in self.metrics.keys():
+                                    del self.metrics[metric_basename]
+                                    REGISTRY.unregister(collector)
+                    except BaseException:
+                        logging.info("Failed to reset collector registry: {0}".format(sys.exc_info()))
+                        error_counter.labels(self.ccu_host).inc()
+
+                    logging.info("Reset collector registry")
 
             gathering_counter.labels(self.ccu_host).inc()
             try:
