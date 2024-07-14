@@ -15,7 +15,6 @@ from pprint import pformat
 import requests
 from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary, start_http_server
 
-
 class HomematicMetricsProcessor(threading.Thread):
 
     METRICS_NAMESPACE = 'homematic'
@@ -201,12 +200,14 @@ class HomematicMetricsProcessor(threading.Thread):
             if devParentAddress == '':
                 if devType in self.supported_device_types:
                     devChildcount = len(device.get('CHILDREN'))
-                    logging.info("Found top-level device {} of type {} with {} children".format(devAddress, devType, devChildcount))
+                    logging.info("Found top-level device {} of type {} with {} child devices (channels)".format(devAddress, devType, devChildcount))
                     logging.debug(pformat(device))
                 else:
                     logging.info("Found unsupported top-level device {} of type {}".format(devAddress, devType))
+            # the following if block will never be executed for top-level devices (actual devices) only child devices (channels)
+            # therefore, in this if block device corresponds to a channel and parent device is the actual device
             if devParentType in self.supported_device_types:
-                logging.debug("Found device {} of type {} in supported parent type {}".format(devAddress, devType, devParentType))
+                logging.debug("Found child device (channel) {} of type {} in supported parent device type {}".format(devAddress, devType, devParentType))
                 logging.debug(pformat(device))
 
                 allowFailedChannel = False
@@ -222,10 +223,10 @@ class HomematicMetricsProcessor(threading.Thread):
                         paramset = self.fetch_param_set(devAddress)
                     except xmlrpc.client.Fault:
                         if allowFailedChannel:
-                            logging.debug("Error reading paramset for device {} of type {} in parent type {} (expected)".format(
+                            logging.debug("Error reading paramset for child device (channel) {} of type {} in parent deivce type {} (expected)".format(
                                 devAddress, devType, devParentType))
                         else:
-                            logging.debug("Error reading paramset for device {} of type {} in parent type {} (unexpected)".format(
+                            logging.debug("Error reading paramset for child device (channel) {} of type {} in parent device type {} (unexpected)".format(
                                 devAddress, devType, devParentType))
                             raise
 
@@ -233,11 +234,18 @@ class HomematicMetricsProcessor(threading.Thread):
                         paramDesc = paramsetDescription.get(key)
                         paramType = paramDesc.get('TYPE')
                         if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
-                            self.process_single_value(devAddress, devType, devParentAddress, devParentType, paramType, key, paramset.get(key))
+                            self.process_single_value(
+                                devAddress, devType,
+                                devParentAddress, devParentType,
+                                paramType, key, paramset.get(key)
+                            )
                         elif paramType == 'ENUM':
                             logging.debug("Found {}: desc: {} key: {}".format(paramType, paramDesc, paramset.get(key)))
-                            self.process_enum(devAddress, devType, devParentAddress, devParentType,
-                                              key, paramset.get(key), paramDesc.get('VALUE_LIST'))
+                            self.process_enum(
+                                devAddress, devType,
+                                devParentAddress, devParentType,
+                                key, paramset.get(key), paramDesc.get('VALUE_LIST')
+                            )
                         else:
                             # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
                             # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
@@ -275,15 +283,27 @@ class HomematicMetricsProcessor(threading.Thread):
         return re.match("^[0-9a-f]{14}:[0-9]+$", deviceAddress, re.IGNORECASE)
 
     def resolve_device_mapping(self, deviceAddress, parentDeviceAddress):
+        # TODO: investigate if first if block is required
+        # not sure why this first if block is required, because this function is only called within if blocks that
+        # restrict to child devices and this deviceAddress corresponds to a channel and never to an actual device
         if deviceAddress in self.device_mappings and not self.is_default_device_address(deviceAddress):
-            return self.device_mappings[deviceAddress]
+            return self.device_mappings.get(deviceAddress)
+        # to my understanding only this elif block can ever get a match from the device mapping because every child
+        # device must belong to a parent device and the parent device it the actual device in the device mapping
         elif parentDeviceAddress in self.device_mappings:
-            return self.device_mappings[parentDeviceAddress]
+            return {
+                k: v for k, v in self.device_mappings.get(parentDeviceAddress).items() if k not in ("channels")
+            } | {
+                "channel": self.device_mappings.get(parentDeviceAddress).get("channels", {}).get(deviceAddress, {})
+            }
         else:
             return {"name": deviceAddress}
 
     def process_single_value(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, paramType, key, value):
         logging.debug("Found {} param {} with value {}".format(paramType, key, value))
+
+        # this function is only executed in if blocks that filter for child devices (channels)
+        # therefore, we can always assume that device corresponds to a channel and parent device to the actual device
 
         if value == '' or value is None:
             return
@@ -292,25 +312,43 @@ class HomematicMetricsProcessor(threading.Thread):
         if not self.metrics.get(gaugename):
             self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=[
                 'ccu',
+                'channel_address',
+                'channel_type',
+                'channel_id',
+                'channel_name',
+                'channel_room_id',
+                'channel_room_name',
+                'channel_function_id',
+                'channel_function_name',
                 'device_address',
                 'device_type',
-                'parent_device_type',
                 'device_id',
                 'device_name',
-                'room_name',
-                'function_name'
+                'device_room_id',
+                'device_room_name',
+                'device_function_id',
+                'device_function_name'
             ], namespace=self.METRICS_NAMESPACE)
         gauge = self.metrics.get(gaugename)
         deviceMapping = self.resolve_device_mapping(deviceAddress, parentDeviceAddress)
         gauge.labels(
             ccu=self.ccu_host,
-            device_address=deviceAddress,
-            device_type=deviceType,
-            parent_device_type=parentDeviceType,
+            channel_address=deviceAddress,
+            channel_type=deviceType,
+            channel_id=deviceMapping.get("channel", {}).get("id"),
+            channel_name=deviceMapping.get("channel", {}).get("name"),
+            channel_room_id=deviceMapping.get("channel", {}).get("firstRoom", {}).get("id"),
+            channel_room_name=deviceMapping.get("channel", {}).get("firstRoom", {}).get("name"),
+            channel_function_id=deviceMapping.get("channel", {}).get("firstFunction", {}).get("id"),
+            channel_function_name=deviceMapping.get("channel", {}).get("firstFunction", {}).get("name"),
+            device_address=parentDeviceAddress,
+            device_type=parentDeviceType,
             device_id=deviceMapping.get("id"),
             device_name=deviceMapping.get("name"),
-            room_name=deviceMapping.get("mainRoom", {}).get("name"),
-            function_name=deviceMapping.get("mainFunction", {}).get("name")
+            device_room_id=deviceMapping.get("mainRoom", {}).get("id"),
+            device_room_name=deviceMapping.get("mainRoom", {}).get("name"),
+            device_function_id=deviceMapping.get("mainFunction", {}).get("id"),
+            device_function_name=deviceMapping.get("mainFunction", {}).get("name")
         ).set(value)
 
     def process_enum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, key, value, istates):
@@ -318,19 +356,31 @@ class HomematicMetricsProcessor(threading.Thread):
             logging.debug("Skipping processing enum {} with empty value".format(key))
             return
 
+        # this function is only executed in if blocks that filter for child devices (channels)
+        # therefore, we can always assume that device corresponds to a channel and parent device to the actual device
+
         gaugename = key.lower() + "_set"
         logging.debug("Found enum param {} with value {}, gauge {}".format(key, value, gaugename))
 
         if not self.metrics.get(gaugename):
             self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=[
                 'ccu',
+                'channel_address',
+                'channel_type',
+                'channel_id',
+                'channel_name',
+                'channel_room_id',
+                'channel_room_name',
+                'channel_function_id',
+                'channel_function_name',
                 'device_address',
                 'device_type',
-                'parent_device_type',
                 'device_id',
                 'device_name',
-                'room_name',
-                'function_name'
+                'device_room_id',
+                'device_room_name',
+                'device_function_id',
+                'device_function_name'
             ], namespace=self.METRICS_NAMESPACE)
         gauge = self.metrics.get(gaugename)
         deviceMapping = self.resolve_device_mapping(deviceAddress, parentDeviceAddress)
@@ -338,13 +388,22 @@ class HomematicMetricsProcessor(threading.Thread):
         logging.debug("Setting {} to value {}/{}".format(deviceMapping.get("name"), str(value), state))
         gauge.labels(
             ccu=self.ccu_host,
-            device_address=deviceAddress,
-            device_type=deviceType,
-            parent_device_type=parentDeviceType,
+            channel_address=deviceAddress,
+            channel_type=deviceType,
+            channel_id=deviceMapping.get("channel", {}).get("id"),
+            channel_name=deviceMapping.get("channel", {}).get("name"),
+            channel_room_id=deviceMapping.get("channel", {}).get("firstRoom", {}).get("id"),
+            channel_room_name=deviceMapping.get("channel", {}).get("firstRoom", {}).get("name"),
+            channel_function_id=deviceMapping.get("channel", {}).get("firstFunction", {}).get("id"),
+            channel_function_name=deviceMapping.get("channel", {}).get("firstFunction", {}).get("name"),
+            device_address=parentDeviceAddress,
+            device_type=parentDeviceType,
             device_id=deviceMapping.get("id"),
             device_name=deviceMapping.get("name"),
-            room_name=deviceMapping.get("mainRoom", {}).get("name"),
-            function_name=deviceMapping.get("mainFunction", {}).get("name")
+            device_room_id=deviceMapping.get("mainRoom", {}).get("id"),
+            device_room_name=deviceMapping.get("mainRoom", {}).get("name"),
+            device_function_id=deviceMapping.get("mainFunction", {}).get("id"),
+            device_function_name=deviceMapping.get("mainFunction", {}).get("name")
         ).state(state)
 
     def read_device_mapping(self):
@@ -430,6 +489,7 @@ class HomematicMetricsProcessor(threading.Thread):
                     "deviceAddress": deviceAddress
                 }]
 
+        # build hierarchical dictionary from individual devices, channels, rooms, and functions dictionaries
         ccu_device_mappings = {
             device["address"] : {k: v for k, v in device.items() if k != "address"} | {
                 "channels": {
@@ -449,8 +509,21 @@ class HomematicMetricsProcessor(threading.Thread):
             } for device in devices
         }
 
+        # add firstRoom and firstFunction for each channel
+        # aggregate rooms and function on device level
+        # add roomIds and functionIds lists on device level as intermediate step
         ccu_device_mappings = {
-            deviceAddress : deviceAttrs | {
+            deviceAddress: {k: v for k, v in deviceAttrs.items() if k != "channels"} | {
+                "channels": {
+                    channelAddress: channelAttrs | {
+                        "firstRoom": {"id" : next(iter(channelAttrs["rooms"].keys()))} | \
+                                next(iter(channelAttrs["rooms"].values())) \
+                                if len(channelAttrs["rooms"]) > 0 else {},
+                        "firstFunction": {"id" : next(iter(channelAttrs["functions"].keys()))} | \
+                                next(iter(channelAttrs["functions"].values())) \
+                                if len(channelAttrs["functions"]) > 0 else {}
+                    } for channelAddress, channelAttrs in deviceAttrs["channels"].items()
+                },
                 "rooms": {
                     roomId: roomAttrs for channelAttrs in deviceAttrs["channels"].values()
                     for roomId, roomAttrs in channelAttrs["rooms"].items()
@@ -470,14 +543,27 @@ class HomematicMetricsProcessor(threading.Thread):
             } for deviceAddress, deviceAttrs in ccu_device_mappings.items()
         }
 
+        # add mainRoomId and mainFunctionId on device level as intermediate step
+        # remove roomIds and functionIds lists from previous intermediate step
         ccu_device_mappings = {
-            deviceAddress : {k: v for k, v in deviceAttrs.items() if k not in ("roomIds", "functionIds")} | {
-                "mainRoom": deviceAttrs["rooms"][max(
-                    set(deviceAttrs["roomIds"]), key = deviceAttrs["roomIds"].count
-                )] if len(deviceAttrs["roomIds"]) > 0 else {},
-                "mainFunction": deviceAttrs["functions"][max(
-                    set(deviceAttrs["functionIds"]), key = list(deviceAttrs["functionIds"]).count
-                )] if len(deviceAttrs["functionIds"]) > 0 else {}
+            deviceAddress: {k: v for k, v in deviceAttrs.items() if k not in ("roomIds", "functionIds")} | {
+                "mainRoomId": max(set(deviceAttrs["roomIds"]), key = deviceAttrs["roomIds"].count) \
+                        if len(deviceAttrs["roomIds"]) > 0 else None,
+                "mainFunctionId": max(set(deviceAttrs["functionIds"]), key = deviceAttrs["functionIds"].count) \
+                        if len(deviceAttrs["functionIds"]) > 0 else None
+            } for deviceAddress, deviceAttrs in ccu_device_mappings.items()
+        }
+
+        # add mainRoom and mainFunction on device level
+        # remove mainRoomId and mainFunctionId from previous intermediate step
+        ccu_device_mappings = {
+            deviceAddress: {k: v for k, v in deviceAttrs.items() if k not in ("mainRoomId", "mainFunctionId")} | {
+                "mainRoom": {"id": deviceAttrs["mainRoomId"]} | \
+                        deviceAttrs["rooms"][deviceAttrs["mainRoomId"]] \
+                        if deviceAttrs["mainRoomId"] != None else {},
+                "mainFunction": {"id": deviceAttrs["mainFunctionId"]} | \
+                        deviceAttrs["functions"][deviceAttrs["mainFunctionId"]] \
+                        if deviceAttrs["mainFunctionId"] != None else {}
             } for deviceAddress, deviceAttrs in ccu_device_mappings.items()
         }
 
