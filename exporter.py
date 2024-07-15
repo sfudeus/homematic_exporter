@@ -13,7 +13,7 @@ from socketserver import ThreadingMixIn
 from http.server import HTTPServer
 from pprint import pformat
 import requests
-from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary, start_http_server, REGISTRY
+from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary, start_http_server
 
 class HomematicMetricsProcessor(threading.Thread):
 
@@ -110,6 +110,7 @@ class HomematicMetricsProcessor(threading.Thread):
 
     device_count = None
     metrics = {}
+    metrics_to_keep = {}
 
     def run(self):
         logging.info("Starting thread for data gathering")
@@ -120,8 +121,8 @@ class HomematicMetricsProcessor(threading.Thread):
         error_counter = Counter('gathering_errors', 'Amount of failed gathering runs', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
         generate_metrics_summary = Summary('generate_metrics_seconds', 'Time spent in gathering runs',
                                            labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
+        remove_metrics_summary = Summary('remove_metrics_seconds', 'Time spent removing old metrics from the collector in python', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
         read_device_mappings_summary = Summary('read_device_mappings_seconds', 'Time spent reading device mappings from CCU', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
-        reset_registry_summary = Summary('reset_registry_seconds', 'Time spent resetting the collector registry in python', labelnames=['ccu'], namespace=self.METRICS_NAMESPACE)
 
         gathering_loop_counter = 1
 
@@ -139,6 +140,7 @@ class HomematicMetricsProcessor(threading.Thread):
                     try:
                         with read_device_mappings_summary.labels(self.ccu_host).time():
                             self.device_mappings = self.read_device_mapping()
+                        logging.info("Read {} device mappings from CCU".format(len(self.device_mappings)))
                     except OSError as os_error:
                         logging.info("Failed to read device mappings: {0}".format(os_error))
                         error_counter.labels(self.ccu_host).inc()
@@ -146,27 +148,21 @@ class HomematicMetricsProcessor(threading.Thread):
                         logging.info("Failed to read device mappings: {0}".format(sys.exc_info()))
                         error_counter.labels(self.ccu_host).inc()
 
-                    logging.info("Read {} device mappings from CCU".format(len(self.device_mappings)))
-
                     try:
-                        # reset registry regarding device metrics, leaving global metrics, and default python metrics untouched
-                        # reset is necessary to remove old metrics for devices/channels that are no longer existent
-                        # TODO: This creates a problem because in the time between reset and recreation there are no metrics
-                        # if the pull from prometheus arrives during this time, it will not gather anything
-                        # unfortunately, I found no other way to do this, otherwise the exporter would have to be restarted
-                        # every time a device/channel is removed, renamed or "moved" to another room/function
-                        with reset_registry_summary.labels(self.ccu_host).time():
-                            collector_to_names = REGISTRY._collector_to_names.copy()
-                            for collector, names in collector_to_names.items():
-                                metric_basename = names[0].removeprefix(self.METRICS_NAMESPACE + "_")
-                                if metric_basename in self.metrics.keys():
-                                    del self.metrics[metric_basename]
-                                    REGISTRY.unregister(collector)
+                        # remove old device/channel metrics that were not refreshed in the previous run,
+                        # leaving global metrics, and default python metrics untouched
+                        # removal of old metrics is necessary for devices/channels that are no longer existent
+                        removed_metrics_count = 0
+                        with remove_metrics_summary.labels(self.ccu_host).time():
+                            for collector_name, collector in self.metrics.items():
+                                for metric in collector._metrics.copy().keys():
+                                    if metric not in self.metrics_to_keep.get(collector_name, ()):
+                                        collector.remove(*metric)
+                                        removed_metrics_count += 1
+                        logging.info("Removed {} old device metrics from collector in python".format(removed_metrics_count))
                     except BaseException:
-                        logging.info("Failed to reset collector registry: {0}".format(sys.exc_info()))
+                        logging.info("Failed to remove old device metrics: {0}".format(sys.exc_info()))
                         error_counter.labels(self.ccu_host).inc()
-
-                    logging.info("Reset collector registry")
 
             gathering_counter.labels(self.ccu_host).inc()
             try:
@@ -213,6 +209,8 @@ class HomematicMetricsProcessor(threading.Thread):
     def generate_metrics(self):
         logging.info("Gathering metrics")
 
+        metrics_of_this_iteration = {}
+
         for device in self.fetch_devices_list():
             devType = device.get('TYPE')
             devParentType = device.get('PARENT_TYPE')
@@ -255,18 +253,26 @@ class HomematicMetricsProcessor(threading.Thread):
                         paramDesc = paramsetDescription.get(key)
                         paramType = paramDesc.get('TYPE')
                         if paramType in ['FLOAT', 'INTEGER', 'BOOL']:
-                            self.process_single_value(
+                            metric_name, metric = self.process_single_value(
                                 devAddress, devType,
                                 devParentAddress, devParentType,
                                 paramType, key, paramset.get(key)
                             )
+                            if metric is not None and metric_name not in metrics_of_this_iteration:
+                                metrics_of_this_iteration[metric_name] = [metric]
+                            elif metric is not None:
+                                metrics_of_this_iteration[metric_name] += [metric]
                         elif paramType == 'ENUM':
                             logging.debug("Found {}: desc: {} key: {}".format(paramType, paramDesc, paramset.get(key)))
-                            self.process_enum(
+                            metric_name, metric = self.process_enum(
                                 devAddress, devType,
                                 devParentAddress, devParentType,
                                 key, paramset.get(key), paramDesc.get('VALUE_LIST')
                             )
+                            if metric is not None and metric_name not in metrics_of_this_iteration:
+                                metrics_of_this_iteration[metric_name] = [metric]
+                            elif metric is not None:
+                                metrics_of_this_iteration[metric_name] += [metric]
                         else:
                             # ATM Unsupported like HEATING_CONTROL_HMIP.PARTY_TIME_START,
                             # HEATING_CONTROL_HMIP.PARTY_TIME_END, COMBINED_PARAMETER or ACTION
@@ -277,6 +283,8 @@ class HomematicMetricsProcessor(threading.Thread):
                         logging.debug(pformat(paramsetDescription))
                         logging.debug("Paramset for {}".format(devAddress))
                         logging.debug(pformat(paramset))
+
+        self.metrics_to_keep = metrics_of_this_iteration
 
     def create_proxy(self):
         transport = xmlrpc.client.Transport()
@@ -326,10 +334,11 @@ class HomematicMetricsProcessor(threading.Thread):
         # this function is only executed in if blocks that filter for child devices (channels)
         # therefore, we can always assume that device corresponds to a channel and parent device to the actual device
 
-        if value == '' or value is None:
-            return
-
         gaugename = key.lower()
+
+        if value == '' or value is None:
+            return gaugename, None
+
         if not self.metrics.get(gaugename):
             self.metrics[gaugename] = Gauge(gaugename, 'Metrics for ' + key, labelnames=[
                 'ccu',
@@ -372,16 +381,36 @@ class HomematicMetricsProcessor(threading.Thread):
             device_function_name=deviceMapping.get("mainFunction", {}).get("name")
         ).set(value)
 
+        return gaugename, (
+            str(self.ccu_host),
+            str(deviceAddress),
+            str(deviceType),
+            str(deviceMapping.get("channel", {}).get("id")),
+            str(deviceMapping.get("channel", {}).get("name")),
+            str(deviceMapping.get("channel", {}).get("firstRoom", {}).get("id")),
+            str(deviceMapping.get("channel", {}).get("firstRoom", {}).get("name")),
+            str(deviceMapping.get("channel", {}).get("firstFunction", {}).get("id")),
+            str(deviceMapping.get("channel", {}).get("firstFunction", {}).get("name")),
+            str(parentDeviceAddress),
+            str(parentDeviceType),
+            str(deviceMapping.get("id")),
+            str(deviceMapping.get("name")),
+            str(deviceMapping.get("mainRoom", {}).get("id")),
+            str(deviceMapping.get("mainRoom", {}).get("name")),
+            str(deviceMapping.get("mainFunction", {}).get("id")),
+            str(deviceMapping.get("mainFunction", {}).get("name"))
+        )
+
     def process_enum(self, deviceAddress, deviceType, parentDeviceAddress, parentDeviceType, key, value, istates):
+        gaugename = key.lower() + "_set"
+        logging.debug("Found enum param {} with value {}, gauge {}".format(key, value, gaugename))
+
         if value == '' or value is None:
             logging.debug("Skipping processing enum {} with empty value".format(key))
-            return
+            return gaugename, None
 
         # this function is only executed in if blocks that filter for child devices (channels)
         # therefore, we can always assume that device corresponds to a channel and parent device to the actual device
-
-        gaugename = key.lower() + "_set"
-        logging.debug("Found enum param {} with value {}, gauge {}".format(key, value, gaugename))
 
         if not self.metrics.get(gaugename):
             self.metrics[gaugename] = Enum(gaugename, 'Metrics for ' + key, states=istates, labelnames=[
@@ -426,6 +455,26 @@ class HomematicMetricsProcessor(threading.Thread):
             device_function_id=deviceMapping.get("mainFunction", {}).get("id"),
             device_function_name=deviceMapping.get("mainFunction", {}).get("name")
         ).state(state)
+
+        return gaugename, (
+            str(self.ccu_host),
+            str(deviceAddress),
+            str(deviceType),
+            str(deviceMapping.get("channel", {}).get("id")),
+            str(deviceMapping.get("channel", {}).get("name")),
+            str(deviceMapping.get("channel", {}).get("firstRoom", {}).get("id")),
+            str(deviceMapping.get("channel", {}).get("firstRoom", {}).get("name")),
+            str(deviceMapping.get("channel", {}).get("firstFunction", {}).get("id")),
+            str(deviceMapping.get("channel", {}).get("firstFunction", {}).get("name")),
+            str(parentDeviceAddress),
+            str(parentDeviceType),
+            str(deviceMapping.get("id")),
+            str(deviceMapping.get("name")),
+            str(deviceMapping.get("mainRoom", {}).get("id")),
+            str(deviceMapping.get("mainRoom", {}).get("name")),
+            str(deviceMapping.get("mainFunction", {}).get("id")),
+            str(deviceMapping.get("mainFunction", {}).get("name"))
+        )
 
     def read_device_mapping(self):
         """Reads device mappings via CCU TCL script, returns a dict of device address to device id, name, rooms and functions"""
