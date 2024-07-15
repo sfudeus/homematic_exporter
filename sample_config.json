@@ -8,7 +8,94 @@
     "HmIP-SWD"
   ],
   "device_mapping": {
-    "00112233445566": "Garden",
-    "00778899aaccdd": "Room1"
+    "00112233445566": {
+      "id": "314",
+      "name": "Terrace Light",
+      "channels": {
+        "00112233445566:0": {
+          "id": "413",
+          "name": "Terrace Light:0",
+          "functions": {
+            "123": {
+              "name": "Energy Management"
+            },
+            "321": {
+              "name": "Lighting"
+            }
+          },
+          "firstFunction": {
+            "id": "123",
+            "name": "Energy Management"
+          },
+          "rooms": {
+            "987": {
+              "name": "Garden"
+            }
+          },
+          "firstRoom": {
+            "id": "987",
+            "name": "Garden"
+          }
+        },
+        "00112233445566:1": {
+          "id": "414",
+          "name": "Terrace Light:1",
+          "functions": {
+            "322": {
+              "name": "Lighting"
+            }
+          },
+          "firstFunction": {
+            "id": "322",
+            "name": "Lighting"
+          },
+          "rooms": {
+            "987": {
+              "name": "Garden"
+            }
+          },
+          "firstRoom": {
+            "id": "987",
+            "name": "Garden"
+          }
+        }
+      },
+      "functions": {
+        "123": {
+          "name": "Energy Management"
+        },
+        "321": {
+          "name": "Lighting"
+        }
+      },
+      "mainFunction": {
+        "id": "321",
+        "name": "Lighting"
+      },
+      "rooms": {
+        "987": {
+          "name": "Garden"
+        }
+      },
+      "mainRoom": {
+        "id": "987",
+        "name": "Garden"
+      }
+    },
+    "00778899aaccdd": {
+      "id": 271,
+      "name": "Motion Sensor",
+      "channels": {
+        "00778899aaccdd:4": {
+          "id": "172",
+          "name": "Motion Sensor:4"
+      },
+      "mainRoom": {
+        "name": "Entrance"
+      },
+      "mainFunction": {
+        "name": "Security"
+      }
+    }
   }
 }

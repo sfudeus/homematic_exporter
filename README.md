@@ -12,31 +12,31 @@ The exporter can be run in different modes:
 
 * with `--dump_devices`, only the device list will be dumped and the script terminates (used for debugging purposes)
 * with `--dump_parameters <deviceAddress>`, the parameters of a single device are dumped and the script terminates (used for debugging purposes)
-* with `--dump_device_names`, all device/channel names recognized from the CCU are dumped
+* with `--dump_device_mappings`, all devices recognized from the CCU are dumped
 * without special arguments (only `ccu_host` is mandatory) data is continuously gathered and exposed via HTTP on the port defined by `--port <port>`
 
 ```bash
 
 usage: exporter.py [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT] [--ccu_user CCU_USER] [--ccu_pass CCU_PASS] [--interval INTERVAL]
-                   [--namereload NAMERELOAD] [--port PORT] [--config_file CONFIG_FILE] [--debug] [--dump_devices] [--dump_parameters DUMP_PARAMETERS]
-                   [--dump_device_names]
+                   [--mappingreload MAPPINGRELOAD] [--port PORT] [--config_file CONFIG_FILE] [--debug] [--dump_devices] [--dump_parameters DUMP_PARAMETERS]
+                   [--dump_device_mappings]
 optional arguments:
-  -h, --help            show this help message and exit
-  --ccu_host CCU_HOST   The hostname of the ccu instance
-  --ccu_port CCU_PORT   The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)
-  --ccu_user CCU_USER   The username for the CCU (if authentication is enabled)
-  --ccu_pass CCU_PASS   The password for the CCU (if authentication is enabled)
-  --interval INTERVAL   The interval between two gathering runs in seconds
-  --namereload NAMERELOAD
-                        After how many intervals the device names are reloaded
-  --port PORT           The port where to expose the exporter
+  -h, --help             show this help message and exit
+  --ccu_host CCU_HOST    The hostname of the ccu instance
+  --ccu_port CCU_PORT    The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)
+  --ccu_user CCU_USER    The username for the CCU (if authentication is enabled)
+  --ccu_pass CCU_PASS    The password for the CCU (if authentication is enabled)
+  --interval INTERVAL    The interval between two gathering runs in seconds
+  --mappingreload MAPPINGRELOAD
+                         After how many intervals the device mappings are reloaded
+  --port PORT            The port where to expose the exporter
   --config_file CONFIG_FILE
-                        A config file with e.g. supported types and device name mappings
+                         A config file with e.g. supported types and device mappings
   --debug
-  --dump_devices        Do not start exporter, just dump device list
+  --dump_devices         Do not start exporter, just dump device list
   --dump_parameters DUMP_PARAMETERS
-                        Do not start exporter, just dump device parameters of given device
-  --dump_device_names   Do not start exporter, just dump device names
+                         Do not start exporter, just dump device parameters of given device
+  --dump_device_mappings Do not start exporter, just dump device mappings
 ```
 
 Can be used via docker as well.
@@ -45,34 +45,36 @@ Can be used via docker as well.
 
 > $ docker run --rm sfudeus/homematic_exporter --help
 usage: homematic_exporter [-h] --ccu_host CCU_HOST [--ccu_port CCU_PORT] [--ccu_user CCU_USER] [--ccu_pass CCU_PASS] [--interval INTERVAL]
-                          [--namereload NAMERELOAD] [--port PORT] [--config_file CONFIG_FILE] [--debug] [--dump_devices]
-                          [--dump_parameters DUMP_PARAMETERS] [--dump_device_names]
+                          [--mappingreload MAPPINGRELOAD] [--port PORT] [--config_file CONFIG_FILE] [--debug] [--dump_devices]
+                          [--dump_parameters DUMP_PARAMETERS] [--dump_device_mappings]
 
 options:
-  -h, --help            show this help message and exit
-  --ccu_host CCU_HOST   The hostname of the ccu instance
-  --ccu_port CCU_PORT   The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)
-  --ccu_user CCU_USER   The username for the CCU (if authentication is enabled)
-  --ccu_pass CCU_PASS   The password for the CCU (if authentication is enabled)
-  --interval INTERVAL   The interval between two gathering runs in seconds
-  --namereload NAMERELOAD
-                        After how many intervals the device names are reloaded
-  --port PORT           The port where to expose the exporter
+  -h, --help             show this help message and exit
+  --ccu_host CCU_HOST    The hostname of the ccu instance
+  --ccu_port CCU_PORT    The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)
+  --ccu_user CCU_USER    The username for the CCU (if authentication is enabled)
+  --ccu_pass CCU_PASS    The password for the CCU (if authentication is enabled)
+  --interval INTERVAL    The interval between two gathering runs in seconds
+  --mappingreload MAPPINGRELOAD
+                         After how many intervals the device mappings are reloaded
+  --port PORT            The port where to expose the exporter
   --config_file CONFIG_FILE
-                        A config file with e.g. supported types and device name mappings
+                         A config file with e.g. supported types and device mappings
   --debug
-  --dump_devices        Do not start exporter, just dump device list
+  --dump_devices         Do not start exporter, just dump device list
   --dump_parameters DUMP_PARAMETERS
-                        Do not start exporter, just dump device parameters of given device
-  --dump_device_names   Do not start exporter, just dump device names
+                         Do not start exporter, just dump device parameters of given device
+  --dump_device_mappings Do not start exporter, just dump device mappings
 ```
 
 ## Metrics
 
 Metrics are all prefixed with `homematic_`, the remaining name is based on the parameter name within the device descriptor.
 All metrics are equipped with labels for the `ccu` instance, the device address, device type and parent device type.
-In addition a device mapping can be added via `--config_file`. Device addresses can be mapped to custom names which are then usable as labels in e.g. Grafana.
-If no mappings are in the config file, the names from the CCU user interface are used and exposed as label `mapped_name`.
+In addition a device mapping can be added via `--config_file`. Device addresses can be mapped to custom device ids, names,
+rooms, and functions which are then usable as labels in e.g. Grafana.
+If no mappings are in the config file, the names from the CCU user interface are used and exposed as labels `device_id`,
+`device_name`, `device_room`, and `device_function`.
 
 ## CCU configuration
 
@@ -80,7 +82,7 @@ The CCU needs to be configured to be able to fetch data.
 
 * For the general functionality, the XML-RPC interface (port 2001, 2010) must be accessible\
 (`Settings -> Control panel -> Configure firewall -> XML-RPC API`)
-* For retrieving device names from the CCU, the Script API (port 8181) has to be enabled\
+* For retrieving device mappings from the CCU, the Script API (port 8181) has to be enabled\
 (`Settings -> Control panel -> Configure firewall -> Script API`)\
 By providing a device mapping configuration, no access to the Script API is required.
 
