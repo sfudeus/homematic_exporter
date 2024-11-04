@@ -8,6 +8,7 @@ import time
 import json
 import re
 import sys
+import os
 
 from socketserver import ThreadingMixIn
 from http.server import HTTPServer
@@ -373,18 +374,30 @@ class HomematicMetricsProcessor(threading.Thread):
 class _ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
     """Thread per request HTTP server."""
 
+class EnvDefault(argparse.Action):
+    def __init__(self, envvar, required=True, default=None, **kwargs):
+        if envvar:
+            if envvar in os.environ:
+                default = os.environ[envvar]
+        if required and default:
+            required = False
+        super(EnvDefault, self).__init__(default=default, required=required, 
+                                         **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
 
 if __name__ == '__main__':
 
     PARSER = argparse.ArgumentParser()
-    PARSER.add_argument("--ccu_host", help="The hostname of the ccu instance", required=True)
-    PARSER.add_argument("--ccu_port", help="The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)", default=2010)
-    PARSER.add_argument("--ccu_user", help="The username for the CCU (if authentication is enabled)")
-    PARSER.add_argument("--ccu_pass", help="The password for the CCU (if authentication is enabled)")
-    PARSER.add_argument("--interval", help="The interval between two gathering runs in seconds", default=60)
-    PARSER.add_argument("--namereload", help="After how many intervals the device names are reloaded", default=30)
-    PARSER.add_argument("--port", help="The port where to expose the exporter", default=8010)
-    PARSER.add_argument("--config_file", help="A config file with e.g. supported types and device name mappings")
+    PARSER.add_argument("--ccu_host", action=EnvDefault, envvar="CCU_HOST", help="The hostname of the ccu instance", required=True)
+    PARSER.add_argument("--ccu_port", action=EnvDefault, envvar="CCU_PORT", help="The port for the xmlrpc service (2001 for BidcosRF, 2010 for HmIP)", default=2010)
+    PARSER.add_argument("--ccu_user", action=EnvDefault, envvar="CCU_USER", help="The username for the CCU (if authentication is enabled)", required=False)
+    PARSER.add_argument("--ccu_pass", action=EnvDefault, envvar="CCU_PASS", help="The password for the CCU (if authentication is enabled)", required=False)
+    PARSER.add_argument("--interval", action=EnvDefault, envvar="INTERVAL", help="The interval between two gathering runs in seconds", default=60)
+    PARSER.add_argument("--namereload", action=EnvDefault, envvar="NAMERELOAD", help="After how many intervals the device names are reloaded", default=30)
+    PARSER.add_argument("--port", action=EnvDefault, envvar="PORT", help="The port where to expose the exporter", default=8010)
+    PARSER.add_argument("--config_file", action=EnvDefault, envvar="CONFIG_FILE", help="A config file with e.g. supported types and device name mappings", required=False)
     PARSER.add_argument("--debug", action="store_true")
     PARSER.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
     PARSER.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
