@@ -67,6 +67,9 @@ options:
   --dump_device_names   Do not start exporter, just dump device names
 ```
 
+All CLI arguments with uppercase arguments can set those via environment variables as well.
+
+
 ## Metrics
 
 Metrics are all prefixed with `homematic_`, the remaining name is based on the parameter name within the device descriptor.
