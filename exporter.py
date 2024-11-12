@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import xmlrpc.client
 import argparse
 import logging
@@ -15,13 +14,36 @@ from http.server import HTTPServer
 from pprint import pformat
 import requests
 from prometheus_client import Gauge, Counter, Enum, MetricsHandler, core, Summary, start_http_server
+from urllib.parse import urlparse
 
+## Allow homematic_exporter to use the system-wide configured http(s) proxy
+class ProxiedTransport(xmlrpc.client.Transport):
+    def __init__(self):
+        proxy_http = os.environ.get('http_proxy')
+        proxy_https = os.environ.get('https_proxy')
+        proxy = proxy_https if proxy_https else proxy_http
+        proxy_parts = urlparse(proxy)
+        self.proxy = proxy_parts.hostname
+        self.proxy_port = proxy_parts.port
+        self.proxy_headers = {}
+        super().__init__(self)
+
+    def make_connection(self, host):
+        if not self.proxy or host.startswith('https'):
+            return super().make_connection(host)
+        self.realhost = host
+        import http.client
+        h = http.client.HTTPConnection(self.proxy, self.proxy_port)
+        h.set_tunnel(self.realhost, headers=self.proxy_headers)
+        return h
 
 class HomematicMetricsProcessor(threading.Thread):
 
     METRICS_NAMESPACE = 'homematic'
     # Supported Homematic (BidcosRF and IP) device types
     DEFAULT_SUPPORTED_TYPES = [
+	'HmIP-eTRV-2 I9F',
+	'HmIP-eTRV-B',
         'HmIP-eTRV-2',
         'HmIP-eTRV-C',
         'HmIP-eTRV-C-2',
@@ -251,7 +273,7 @@ class HomematicMetricsProcessor(threading.Thread):
                         logging.debug(pformat(paramset))
 
     def create_proxy(self):
-        transport = xmlrpc.client.Transport()
+        transport = ProxiedTransport()
         connection = transport.make_connection(self.ccu_host)
         connection.timeout = 5
         return xmlrpc.client.ServerProxy(self.ccu_url, transport=transport)
