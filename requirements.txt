@@ -1,3 +1,4 @@
 prometheus-client
 pylint
 requests
+logfmter

@@ -10,6 +10,8 @@ import re
 import sys
 import os
 
+from logfmter import Logfmter
+
 from socketserver import ThreadingMixIn
 from http.server import HTTPServer
 from pprint import pformat
@@ -381,7 +383,7 @@ class EnvDefault(argparse.Action):
                 default = os.environ[envvar]
         if required and default:
             required = False
-        super(EnvDefault, self).__init__(default=default, required=required, 
+        super(EnvDefault, self).__init__(default=default, required=required,
                                          **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None):
@@ -399,15 +401,22 @@ if __name__ == '__main__':
     PARSER.add_argument("--port", action=EnvDefault, envvar="PORT", help="The port where to expose the exporter", default=8010)
     PARSER.add_argument("--config_file", action=EnvDefault, envvar="CONFIG_FILE", help="A config file with e.g. supported types and device name mappings", required=False)
     PARSER.add_argument("--debug", action="store_true")
+    PARSER.add_argument("--logfmt", action="store_true")
     PARSER.add_argument("--dump_devices", help="Do not start exporter, just dump device list", action="store_true")
     PARSER.add_argument("--dump_parameters", help="Do not start exporter, just dump device parameters of given device")
     PARSER.add_argument("--dump_device_names", help="Do not start exporter, just dump device names", action="store_true")
     ARGS = PARSER.parse_args()
 
+    log_level = logging.INFO
     if ARGS.debug:
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+        log_level = logging.DEBUG
+
+    if ARGS.logfmt:
+        log_handler = logging.StreamHandler()
+        log_handler.setFormatter(Logfmter(keys=["level", "time"], mapping={"level": "levelname", "time": "asctime"}))
+        logging.basicConfig(level=log_level, handlers=[log_handler])
     else:
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
 
     auth = None
     if ARGS.ccu_user and ARGS.ccu_pass:
