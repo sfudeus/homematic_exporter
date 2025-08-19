@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm
+FROM python:3.13-slim-trixie
 COPY requirements.txt /tmp
 RUN apt-get update && apt-get install curl -y
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
